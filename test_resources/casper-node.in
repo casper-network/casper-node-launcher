@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+
+# This script is a mock of casper-node.  It has the same subcommands which take the same args, and
+# writes a message to logfile on success.
+#
+# The script should be copied to the location where `casper-node` would be expected to have been
+# installed to.  It should have $VERSION and $OLD_VERSION replaced with valid values.
+#
+# Running with args `migrate-data --old-config a.toml --new-config b.toml` causes the script to
+# check that a.toml contains only the text specified in $OLD_VERSION and b.toml the text specified
+# in $VERSION.  On success, the value of $MIGRATE_SUCCESS_MESSAGE is written to a file named
+# $LOG_FILENAME in the root test folder (two directories up from the location of the script).
+#
+# Running with args `validator a.toml` causes the script to check that a.toml contains only the
+# text specified in $VERSION.  On success, the value of $VALIDATOR_SUCCESS_MESSAGE is written to a
+# file named $LOG_FILENAME in the root test folder (two directories up from the location of the
+# script).
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+VERSION=""
+OLD_VERSION=""
+MIGRATE_SUCCESS_MESSAGE="Node v${VERSION} migrated data"
+VALIDATOR_SUCCESS_MESSAGE="Node v${VERSION} ran as validator"
+LOG_FILENAME="log.txt"
+
+# In tests, this script will be installed at e.g. <test dir>/bin/1_0_0.  We want to write the log to <test dir>.
+LOG_FILE="$(readlink -f $(dirname ${0})/../..)/${LOG_FILENAME}"
+
+log() {
+    printf "%s\n" "${1}" >> "${LOG_FILE}"
+}
+
+migrate_data() {
+    local EXPECTED_OLD_CONFIG_ARG_NAME="--old-config"
+    local EXPECTED_NEW_CONFIG_ARG_NAME="--new-config"
+
+    if [[ ${#} -ne 4 ||
+          "${1}" != ${EXPECTED_OLD_CONFIG_ARG_NAME} ||
+          "${3}" != ${EXPECTED_NEW_CONFIG_ARG_NAME} ]]
+    then
+        log "Invalid args for migrate-data subcommand: expected ${EXPECTED_OLD_CONFIG_ARG_NAME} <PATH> ${EXPECTED_NEW_CONFIG_ARG_NAME} <PATH>; got ${@}"
+        exit 101
+    fi
+
+    if [[ ! -f "${2}" ]]; then
+        log "Old node config at '${2}' does not exist"
+        exit 101
+    fi
+
+    if [[ ! -f "${4}" ]]; then
+        log "New node config at '${4}' does not exist"
+        exit 101
+    fi
+
+    OLD_CONFIG_CONTENTS=$(<"${2}")
+    if [[ "${OLD_CONFIG_CONTENTS}" != ${OLD_VERSION} ]]; then
+        log "Old config file at ${2} should contain ${OLD_VERSION} but contains ${OLD_CONFIG_CONTENTS}"
+        exit 101
+    fi
+
+    NEW_CONFIG_CONTENTS=$(<"${4}")
+    if [[ "${NEW_CONFIG_CONTENTS}" != ${VERSION} ]]; then
+        log "New config file at ${4} should contain ${VERSION} but contains ${NEW_CONFIG_CONTENTS}"
+        exit 101
+    fi
+
+    log "${MIGRATE_SUCCESS_MESSAGE}"
+}
+
+validator() {
+    if [[ ${#} -ne 1 ]]; then
+        log "Invalid args for validator subcommand: expected <CONFIG-PATH>; got ${@}"
+        exit 101
+    fi
+
+    if [[ ! -f "${1}" ]]; then
+        log "Node config at '${1}' does not exist"
+        exit 101
+    fi
+
+    CONFIG_CONTENTS=$(<"${1}")
+    if [[ "${CONFIG_CONTENTS}" != ${VERSION} ]]; then
+        log "Config file at ${1} should contain ${VERSION} but contains ${CONFIG_CONTENTS}"
+        exit 101
+    fi
+
+    sleep 1
+    log "${VALIDATOR_SUCCESS_MESSAGE}"
+}
+
+main() {
+    local MIGRATE_DATA_SUBCOMMAND="migrate-data"
+    local VALIDATOR_SUBCOMMAND="validator"
+
+    if [[ ${#} -eq 0 ]]; then
+        log "No subcommand passed: expected '${MIGRATE_DATA_SUBCOMMAND}' or '${VALIDATOR_SUBCOMMAND}'"
+        exit 101
+    fi
+
+    if [[ "${1}" == $MIGRATE_DATA_SUBCOMMAND ]]; then
+        shift
+        migrate_data "${@}"
+    elif [[ "${1}" == $VALIDATOR_SUBCOMMAND ]]; then
+        shift
+        validator "${@}"
+    else
+        log "Invalid subcommand passed: expected '${MIGRATE_DATA_SUBCOMMAND}' or '${VALIDATOR_SUBCOMMAND}'"
+        exit 101
+    fi
+}
+
+main "${@}"

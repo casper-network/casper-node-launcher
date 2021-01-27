@@ -172,7 +172,7 @@ mod tests {
         // Try a valid binary but use a bad arg to make it exit with a failure.
         let cargo = env!("CARGO");
         command = Command::new(cargo);
-        command.arg("--bad-arg");
+        command.arg("--deliberately-passing-bad-arg-for-test");
         let error = run_command(command).unwrap_err().to_string();
         assert!(error.ends_with("exited with error"), "{}", error);
     }

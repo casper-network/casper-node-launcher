@@ -7,6 +7,7 @@ RUST_TOOLCHAIN := $(shell cat rust-toolchain)
 CARGO_OPTS := --locked
 CARGO := $(CARGO) $(CARGO_TOOLCHAIN) $(CARGO_OPTS)
 
+
 DISABLE_LOGGING = RUST_LOG=MatchesNothing
 
 .PHONY: all
@@ -52,22 +53,9 @@ check: \
 	audit \
 	test
 
-
 .PHONY: clean
 clean:
 	$(CARGO) clean
-
-.PHONY: deb
-deb: setup-cargo-packagers
-	$(CARGO) deb
-
-.PHONY: publish
-publish:
-	./publish.sh
-
-.PHONY: setup-cargo-packagers
-setup-cargo-packagers: setup
-	$(CARGO) install cargo-deb
 
 .PHONY: setup-audit
 setup-audit: setup

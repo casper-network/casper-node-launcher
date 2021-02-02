@@ -3,31 +3,36 @@ kind: pipeline
 type: docker
 name: main
 
-# Steps perform as fast serially, due to file thrashing.
 steps:
+  - name: setup-env
+    image: casperlabs/node-build-u1804
+    commands:
+      - rustup update stable
+
   - name: cargo-fmt
     image: casperlabs/node-build-u1804
     commands:
-      - make setup
-      - make check-format
+      - rustup update stable
+      - cargo fmt -- --check
 
   - name: cargo-clippy
     image: casperlabs/node-build-u1804
     commands:
-      - make setup
-      - make lint
+      - rustup update stable
+      - cargo clippy -- --deny warnings
 
   - name: cargo-audit
     image: casperlabs/node-build-u1804
     commands:
-      - make setup-audit
-      - make audit
+      - rustup update stable
+      - cargo install cargo-audit
+      - cargo audit --deny warnings
 
   - name: test
     image: casperlabs/node-build-u1804
     commands:
-      - make setup
-      - make test
+      - rustup update stable
+      - cargo test
 
 trigger:
   branch:

@@ -1,0 +1,75 @@
+---
+kind: pipeline
+type: docker
+name: main
+
+# Steps perform as fast serially, due to file thrashing.
+steps:
+  - name: cargo-fmt
+    image: casperlabs/node-build-u1804
+    commands:
+      - make setup
+      - make check-format
+
+  - name: cargo-clippy
+    image: casperlabs/node-build-u1804
+    commands:
+      - make setup
+      - make lint
+
+  - name: cargo-audit
+    image: casperlabs/node-build-u1804
+    commands:
+      - make setup-audit
+      - make audit
+
+  - name: test
+    image: casperlabs/node-build-u1804
+    commands:
+      - make setup
+      - make test
+
+trigger:
+  branch:
+    - master
+    - trying
+    - staging
+    - "release-*"
+  event:
+    exclude:
+      - tag
+
+---
+kind: pipeline
+type: docker
+name: failed-main
+
+clone:
+  disable: true
+
+steps:
+  - name: notify
+    image: plugins/slack
+    settings:
+      webhook:
+        from_secret: slack_webhook
+      template:
+        - |
+          casper-node-launcher build status: *{{ uppercasefirst build.status }}*
+          Author: {{ build.author }}
+          Drone Build: <{{ build.link }}|#{{ build.number }}>
+          Commit Link: <https://github.com/{{repo.owner}}/{{repo.name}}/commit/{{build.commit}}|{{ truncate build.commit 10 }}>
+trigger:
+  status:
+    - failure
+  branch:
+    - master
+    - trying
+    - staging
+    - "release-*"
+  event:
+    exclude:
+      - tag
+
+depends_on:
+  - main

@@ -1,14 +1,9 @@
 ---
 kind: pipeline
 type: docker
-name: main
+name: main-pipeline
 
 steps:
-  - name: setup-env
-    image: casperlabs/node-build-u1804
-    commands:
-      - rustup update stable
-
   - name: cargo-fmt
     image: casperlabs/node-build-u1804
     commands:
@@ -36,7 +31,7 @@ steps:
 
 trigger:
   branch:
-    - master
+    - main
     - trying
     - staging
     - "release-*"
@@ -68,7 +63,7 @@ trigger:
   status:
     - failure
   branch:
-    - master
+    - main
     - trying
     - staging
     - "release-*"
@@ -77,4 +72,4 @@ trigger:
       - tag
 
 depends_on:
-  - main
+  - main-pipeline

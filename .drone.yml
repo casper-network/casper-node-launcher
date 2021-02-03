@@ -1,0 +1,75 @@
+---
+kind: pipeline
+type: docker
+name: main-pipeline
+
+steps:
+  - name: cargo-fmt
+    image: casperlabs/node-build-u1804
+    commands:
+      - rustup update stable
+      - cargo fmt -- --check
+
+  - name: cargo-clippy
+    image: casperlabs/node-build-u1804
+    commands:
+      - rustup update stable
+      - cargo clippy -- --deny warnings
+
+  - name: cargo-audit
+    image: casperlabs/node-build-u1804
+    commands:
+      - rustup update stable
+      - cargo install cargo-audit
+      - cargo audit --deny warnings
+
+  - name: test
+    image: casperlabs/node-build-u1804
+    commands:
+      - rustup update stable
+      - cargo test
+
+trigger:
+  branch:
+    - main
+    - trying
+    - staging
+    - "release-*"
+  event:
+    exclude:
+      - tag
+
+---
+kind: pipeline
+type: docker
+name: failed-main
+
+clone:
+  disable: true
+
+steps:
+  - name: notify
+    image: plugins/slack
+    settings:
+      webhook:
+        from_secret: slack_webhook
+      template:
+        - |
+          casper-node-launcher build status: *{{ uppercasefirst build.status }}*
+          Author: {{ build.author }}
+          Drone Build: <{{ build.link }}|#{{ build.number }}>
+          Commit Link: <https://github.com/{{repo.owner}}/{{repo.name}}/commit/{{build.commit}}|{{ truncate build.commit 10 }}>
+trigger:
+  status:
+    - failure
+  branch:
+    - main
+    - trying
+    - staging
+    - "release-*"
+  event:
+    exclude:
+      - tag
+
+depends_on:
+  - main-pipeline

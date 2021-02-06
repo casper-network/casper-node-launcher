@@ -12,6 +12,8 @@ if [ -z "$1" ]; then
 fi
 
 SEMVER=$1
+# Default to delta if network is not sent as second argument
+NETWORK=${2:-delta}
 ETC_PATH="/etc/casper"
 BIN_PATH="/var/lib/casper/bin"
 
@@ -38,9 +40,7 @@ if [ -d "$BIN_FULL_PATH" ]; then
   exit 5
 fi
 
-# Should work as
-# BASE_URL="https://genesis.casperlabs.io/$SEMVER"
-BASE_URL="https://s3.us-east-2.amazonaws.com/genesis.casperlabs.io/$SEMVER"
+BASE_URL="http://genesis.casperlabs.io/$NETWORK/$SEMVER"
 CONFIG_ARCHIVE="config.tar.gz"
 CONFIG_URL="$BASE_URL/$CONFIG_ARCHIVE"
 BIN_ARCHIVE="bin.tar.gz"

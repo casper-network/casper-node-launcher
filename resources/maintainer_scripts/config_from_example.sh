@@ -4,20 +4,20 @@ set -e
 # This script will generate a CONFIG file appropriate to installation machine.
 
 if [ -z "$1" ]; then
-  echo "Error: path argument missing."
+  echo "Error: version argument missing."
   echo "config-example.toml should exist in a given /etc/casper/[version] folder."
   echo ""
   echo "Ex: for version 1.0.1 of casper-node, /etc/casper/1_0_1/config-example.toml should exist."
-  echo "    Should be called with '${0} /etc/casper/1_0_1/'"
+  echo "    Should be called with '${0} 1_0_1'"
   exit 1
 fi
 
-CONFIG_PATH=$1
-CONFIG=$CONFIG_PATH"config.toml"
-CONFIG_EXAMPLE=$CONFIG_PATH"config-example.toml"
-CONFIG_NEW=$CONFIG_PATH"config.toml.new"
+CONFIG_PATH="/etc/casper/$1"
+CONFIG="$CONFIG_PATH/config.toml"
+CONFIG_EXAMPLE="$CONFIG_PATH/config-example.toml"
+CONFIG_NEW="$CONFIG_PATH/config.toml.new"
 
-if [ ! -d "$CONFIG_EXAMPLE" ]; then
+if [ ! -f "$CONFIG_EXAMPLE" ]; then
   echo "Error: $CONFIG_EXAMPLE not found."
   exit 2
 fi

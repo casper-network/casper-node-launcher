@@ -25,6 +25,7 @@ tempfile = "3.2.0"
 
 [package.metadata.deb]
 depends = "curl"
+revision = "0"
 assets = [
     ["./target/release/casper-node-launcher", "/usr/bin/casper-node-launcher", "755"],
     ["./resources/BIN_README.md", "/var/lib/casper/bin/README.md", "755"],

@@ -34,24 +34,6 @@ steps:
     commands:
       - cargo deb
 
-  # we want to publish to the test repo, only when code is pushed to main or release-* branch.
-  # bors should make sure, that it has passed on staging or trying branches
-  - name: publish-test-bintray
-    image: casperlabs/node-build-u1804
-    commands:
-      - "./upload.sh --repo-name casper-debian-tests --package-name casper-node-launcher"
-    environment:
-      CL_VAULT_TOKEN:
-        from_secret: vault_token
-      CL_VAULT_HOST:
-        from_secret: vault_host
-    when:
-      branch:
-        - main
-        - "release-*"
-      event:
-        - push
-
 trigger:
   branch:
     - main

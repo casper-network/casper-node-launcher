@@ -36,7 +36,7 @@ assets = [
     ["./resources/DEB_README.md", "/etc/casper/README.md", "644"],
     ["./resources/VALIDATOR_KEYS_README.md", "/etc/casper/validator_keys/README.md", "644"]
 ]
-maintainer-scripts = "../resources/maintainer_scripts/debian"
+maintainer-scripts = "./resources/maintainer_scripts/debian"
 extended-description = """
 Package for Casper Node Launcher
 

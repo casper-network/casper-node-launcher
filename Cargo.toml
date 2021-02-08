@@ -44,5 +44,5 @@ For information on using package, see https://github.com/CasperLabs/casper-node-
 """
 
 [package.metadata.deb.systemd-units]
-unit-scripts = "./resources/maintainer_scripts/casper_node_lancher"
+unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"
 restart-after-upgrade = false

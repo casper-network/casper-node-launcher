@@ -126,7 +126,7 @@ impl Launcher {
 
         debug!(path=%state_path.display(), "stored state doesn't exist");
 
-        let version = launcher.max_installed_version()?;
+        let version = launcher.next_installed_version(&Version::new(0, 0, 0))?;
         let node_info = launcher.new_node_info(version);
         launcher.state = State::RunNodeAsValidator(node_info);
         launcher.write()?;
@@ -161,21 +161,23 @@ impl Launcher {
         Ok(())
     }
 
-    /// Gets the maximum installed version of the node binary and config.
+    /// Gets the next installed version of the node binary and config.
     ///
     /// Returns an error if the versions cannot be deduced, or if the two versions are different.
-    fn max_installed_version(&self) -> Result<Version> {
-        let max_binary_version = utils::max_installed_version(&self.binary_root_dir)?;
-        let max_config_version = utils::max_installed_version(&self.config_root_dir)?;
-        if max_config_version != max_binary_version {
-            warn!(%max_binary_version, %max_config_version, "max version mismatch");
+    fn next_installed_version(&self, current_version: &Version) -> Result<Version> {
+        let next_binary_version =
+            utils::next_installed_version(&self.binary_root_dir, current_version)?;
+        let next_config_version =
+            utils::next_installed_version(&self.config_root_dir, current_version)?;
+        if next_config_version != next_binary_version {
+            warn!(%next_binary_version, %next_config_version, "next version mismatch");
             bail!(
-                "max binary version {} != max config version {}",
-                max_binary_version,
-                max_config_version,
+                "next binary version {} != next config version {}",
+                next_binary_version,
+                next_config_version,
             );
         }
-        Ok(max_binary_version)
+        Ok(next_binary_version)
     }
 
     /// Constructs a new `NodeInfo` based on the given version.
@@ -254,7 +256,7 @@ impl Launcher {
     fn transition_state(&mut self) -> Result<()> {
         let new_state = match mem::take(&mut self.state) {
             State::RunNodeAsValidator(old_info) => {
-                let next_version = self.max_installed_version()?;
+                let next_version = self.next_installed_version(&old_info.version)?;
                 if next_version <= old_info.version {
                     let msg = format!(
                         "no higher version than current {} installed",
@@ -625,7 +627,7 @@ mod tests {
 
         let error = Launcher::new().unwrap_err().to_string();
         assert_eq!(
-            "max binary version 1.0.0 != max config version 2.0.0",
+            "next binary version 1.0.0 != next config version 2.0.0",
             error
         );
     }

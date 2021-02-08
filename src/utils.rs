@@ -4,11 +4,14 @@ use anyhow::{bail, Error, Result};
 use semver::Version;
 use tracing::{debug, warn};
 
-/// Iterates the given path, returning the subdir representing the greatest SemVer version.
+/// Iterates the given path, returning the subdir representing the immediate next SemVer version
+/// after `current_version`.
 ///
 /// Subdir names should be semvers with dots replaced with underscores.
-pub fn max_installed_version(dir: &Path) -> Result<Version> {
-    let mut max_version = Version::new(0, 0, 0);
+pub fn next_installed_version(dir: &Path, current_version: &Version) -> Result<Version> {
+    let max_version = Version::new(u64::max_value(), u64::max_value(), u64::max_value());
+
+    let mut next_version = max_version.clone();
     let mut read_version = false;
     for entry in map_and_log_error(
         fs::read_dir(dir),
@@ -31,8 +34,8 @@ pub fn max_installed_version(dir: &Path) -> Result<Version> {
             }
         };
 
-        if version > max_version {
-            max_version = version;
+        if version > *current_version && version < next_version {
+            next_version = version;
         }
         read_version = true;
     }
@@ -46,7 +49,11 @@ pub fn max_installed_version(dir: &Path) -> Result<Version> {
         bail!(msg);
     }
 
-    Ok(max_version)
+    if next_version == max_version {
+        next_version = current_version.clone();
+    }
+
+    Ok(next_version)
 }
 
 /// Runs the given command as a child process.
@@ -86,36 +93,42 @@ mod tests {
     use crate::logging;
 
     #[test]
-    fn should_get_max_installed_version() {
+    fn should_get_next_installed_version() {
         let _ = logging::init();
         let tempdir = tempfile::tempdir().expect("should create temp dir");
 
-        let max_version = || max_installed_version(tempdir.path()).unwrap();
+        let get_next_version = |current_version: &Version| {
+            next_installed_version(tempdir.path(), current_version).unwrap()
+        };
 
+        let mut current = Version::new(0, 0, 0);
+        let mut next_version = Version::new(1, 0, 0);
         fs::create_dir(tempdir.path().join("1_0_0")).unwrap();
-        assert_eq!(max_version(), Version::new(1, 0, 0));
+        assert_eq!(get_next_version(&current), next_version);
+        current = next_version;
+
+        next_version = Version::new(1, 2, 3);
+        fs::create_dir(tempdir.path().join("1_2_3")).unwrap();
+        assert_eq!(get_next_version(&current), next_version);
+        current = next_version.clone();
 
         fs::create_dir(tempdir.path().join("1_0_3")).unwrap();
-        assert_eq!(max_version(), Version::new(1, 0, 3));
-
-        fs::create_dir(tempdir.path().join("1_2_3")).unwrap();
-        assert_eq!(max_version(), Version::new(1, 2, 3));
-
-        fs::create_dir(tempdir.path().join("1_2_2")).unwrap();
-        assert_eq!(max_version(), Version::new(1, 2, 3));
+        assert_eq!(get_next_version(&current), next_version);
 
         fs::create_dir(tempdir.path().join("2_2_2")).unwrap();
-        assert_eq!(max_version(), Version::new(2, 2, 2));
+        fs::create_dir(tempdir.path().join("3_3_3")).unwrap();
+        assert_eq!(get_next_version(&current), Version::new(2, 2, 2));
     }
 
     #[test]
     fn should_ignore_invalid_versions() {
         let _ = logging::init();
         let tempdir = tempfile::tempdir().expect("should create temp dir");
+        let current_version = Version::new(0, 0, 0);
 
         // Try with a non-existent dir.
         let non_existent_dir = Path::new("not_a_dir");
-        let error = max_installed_version(&non_existent_dir)
+        let error = next_installed_version(&non_existent_dir, &current_version)
             .unwrap_err()
             .to_string();
         assert_eq!(
@@ -124,7 +137,7 @@ mod tests {
         );
 
         // Try with a dir which has no subdirs.
-        let error = max_installed_version(tempdir.path())
+        let error = next_installed_version(tempdir.path(), &current_version)
             .unwrap_err()
             .to_string();
         assert_eq!(
@@ -137,7 +150,7 @@ mod tests {
 
         // Try with a dir which has one subdir which is not a valid version representation.
         fs::create_dir(tempdir.path().join("not_a_version")).unwrap();
-        let error = max_installed_version(tempdir.path())
+        let error = next_installed_version(tempdir.path(), &current_version)
             .unwrap_err()
             .to_string();
         assert_eq!(
@@ -151,7 +164,7 @@ mod tests {
         // Try with a dir which has a valid and invalid subdir - the invalid one should be ignored.
         fs::create_dir(tempdir.path().join("1_2_3")).unwrap();
         assert_eq!(
-            max_installed_version(tempdir.path()).unwrap(),
+            next_installed_version(tempdir.path(), &current_version).unwrap(),
             Version::new(1, 2, 3)
         );
     }

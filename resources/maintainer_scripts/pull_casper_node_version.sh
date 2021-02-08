@@ -49,7 +49,7 @@ BIN_URL="$BASE_URL/$BIN_ARCHIVE"
 cd $ETC_PATH
 
 echo "Downloading $CONFIG_ARCHIVE from $CONFIG_URL"
-if curl -JLO --max-time 15 "$CONFIG_URL"; then
+if curl -JLO "$CONFIG_URL"; then
   echo "Complete"
 else
   echo "Error: unable to pull $CONFIG_ARCHIVE from $CONFIG_URL."
@@ -59,7 +59,7 @@ fi
 CONFIG_ARCHIVE_PATH="$ETC_PATH/$CONFIG_ARCHIVE"
 
 echo "Downloading $BIN_ARCHIVE from $BIN_URL"
-if curl -JLO --max-time 15 "$BIN_URL"; then
+if curl -JLO "$BIN_URL"; then
   echo "Complete"
 else
   echo "Error: unable to pull $BIN_ARCHIVE from $BIN_URL"

@@ -29,6 +29,11 @@ steps:
       - rustup update stable
       - cargo test
 
+  - name: build-deb
+    image: casperlabs/node-build-u1804
+    commands:
+      - cargo deb
+
 trigger:
   branch:
     - main
@@ -73,3 +78,55 @@ trigger:
 
 depends_on:
   - main-pipeline
+---
+kind: pipeline
+type: docker
+name: release-by-tag
+
+steps:
+  - name: build-deb
+    image: casperlabs/node-build-u1804
+    commands:
+      - cargo deb
+
+  - name: publish-bintray
+    image: casperlabs/node-build-u1804
+    commands:
+      - "./upload_to_bintray.sh --repo-name debian --package-name casper-node-launcher --tag true"
+    environment:
+      CL_VAULT_TOKEN:
+        from_secret: vault_token
+      CL_VAULT_HOST:
+        from_secret: vault_host
+
+trigger:
+  ref:
+    - refs/tags/v*
+---
+kind: pipeline
+type: docker
+name: failed-publish
+
+clone:
+  disable: true
+
+steps:
+  - name: notify
+    image: plugins/slack
+    settings:
+      webhook:
+        from_secret: slack_webhook
+      template:
+        - |
+          casper-node-launcher build status: *{{ uppercasefirst build.status }}*
+          Author: {{ build.author }}
+          Drone Build: <{{ build.link }}|#{{ build.number }}>
+          Commit Link: <https://github.com/{{repo.owner}}/{{repo.name}}/commit/{{build.commit}}|{{ truncate build.commit 10 }}>
+trigger:
+  status:
+    - failure
+  ref:
+    - refs/tags/v*
+
+depends_on:
+  - release-by-tag

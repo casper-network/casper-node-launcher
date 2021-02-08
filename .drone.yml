@@ -92,7 +92,7 @@ steps:
   - name: publish-bintray
     image: casperlabs/node-build-u1804
     commands:
-      - "./upload_to_bintray.sh --repo-name debian --package-name casper-node-launcher --tag true"
+      - "./upload_to_bintray.sh --repo-name debian --package-name casper-node-launcher --package-tag true"
     environment:
       CL_VAULT_TOKEN:
         from_secret: vault_token

@@ -1,4 +1,4 @@
-use std::{fs, path::Path, process::Command, str::FromStr};
+use std::{fs, path::Path, process::Command, str::FromStr, sync::atomic::Ordering};
 
 use anyhow::{bail, Error, Result};
 use semver::Version;
@@ -59,6 +59,7 @@ pub fn next_installed_version(dir: &Path, current_version: &Version) -> Result<V
 /// Runs the given command as a child process.
 pub fn run_command(mut command: Command) -> Result<()> {
     let mut child = map_and_log_error(command.spawn(), format!("failed to execute {:?}", command))?;
+    crate::CHILD_PID.store(child.id(), Ordering::SeqCst);
 
     let exit_status = map_and_log_error(
         child.wait(),

@@ -7,4 +7,5 @@
   rotate 7
   missingok
   notifempty
+  copytruncate
 }

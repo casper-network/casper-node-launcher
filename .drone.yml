@@ -5,32 +5,28 @@ name: main-pipeline
 
 steps:
   - name: cargo-fmt
-    image: casperlabs/node-build-u1804
+    image: casperlabs/casper-node-launcher-build
     commands:
       - rustup update stable
       - cargo fmt -- --check
 
   - name: cargo-clippy
-    image: casperlabs/node-build-u1804
+    image: casperlabs/casper-node-launcher-build
     commands:
-      - rustup update stable
       - cargo clippy -- --deny warnings
 
   - name: cargo-audit
-    image: casperlabs/node-build-u1804
+    image: casperlabs/casper-node-launcher-build
     commands:
-      - rustup update stable
-      - cargo install cargo-audit
       - cargo audit --deny warnings
 
   - name: test
-    image: casperlabs/node-build-u1804
+    image: casperlabs/casper-node-launcher-build
     commands:
-      - rustup update stable
       - cargo test
 
   - name: build-deb
-    image: casperlabs/node-build-u1804
+    image: casperlabs/casper-node-launcher-build
     commands:
       - cargo deb
 
@@ -85,12 +81,12 @@ name: release-by-tag
 
 steps:
   - name: build-deb
-    image: casperlabs/node-build-u1804
+    image: casperlabs/casper-node-launcher-build
     commands:
       - cargo deb
 
   - name: publish-bintray
-    image: casperlabs/node-build-u1804
+    image: casperlabs/casper-node-launcher-build
     commands:
       - "./upload_to_bintray.sh --repo-name debian --package-name casper-node-launcher --package-tag true"
     environment:

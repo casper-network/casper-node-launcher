@@ -7,12 +7,24 @@ A binary which runs and upgrades the casper-node of the Casper network.
 The casper-node-launcher takes no arguments other than the standard `--help` and `--version`.
 
 On startup, the launcher either tries to read its previously cached state from disk, or assumes a fresh start.  On a
-fresh start, the launcher searches for the latest installed version of `casper-node` and starts running it in validator
+fresh start, the launcher searches for the lowest installed version of `casper-node` and starts running it in validator
 mode.
 
-After every successful run of the `casper-node` binary in validator mode, the launcher again searches for the latest
-installed version of casper-node.  If it cannot find a newer version, it exits.  Otherwise it runs the `casper-node` in
-migrate-data mode.
+After every run of the `casper-node` binary in validator mode, the launcher does the following based upon the exit code
+returned by `casper-node`:
+  * If 0 (success), searches for the immediate next installed version of `casper-node` and runs it in migrate-data mode
+  * If 102 (downgrade), searches for the immediate previous installed version of `casper-node` and runs it in validator
+    mode
+  * Any other value causes the launcher to exit with an error
+
+After every run of the `casper-node` binary in migrate-data mode, the launcher does the following based upon the exit
+code returned by `casper-node`:
+  * If 0 (success), runs the same version of `casper-node` in validator mode
+  * If 102 (downgrade), searches for the immediate previous installed version of `casper-node` and runs it in validator
+    mode
+  * Any other value causes the launcher to exit with an error
+
+If the launcher cannot find an appropriate version at any stage of upgrading or downgrading, it exits with an error.
 
 The default path for the casper-node's config file is `/etc/casper/1_0_0/config.toml` where the folder `1_0_0`
 indicates the semver version of the node software.

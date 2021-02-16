@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use tracing::{debug, info, warn};
 
-use crate::utils;
+use crate::utils::{self, NodeExitCode};
 
 /// The name of the file for the on-disk record of the node-launcher's current state.
 const STATE_FILE_NAME: &str = "casper-node-launcher-state.toml";
@@ -180,6 +180,25 @@ impl Launcher {
         Ok(next_binary_version)
     }
 
+    /// Gets the previous installed version of the node binary and config.
+    ///
+    /// Returns an error if the versions cannot be deduced, or if the two versions are different.
+    fn previous_installed_version(&self, current_version: &Version) -> Result<Version> {
+        let previous_binary_version =
+            utils::previous_installed_version(&self.binary_root_dir, current_version)?;
+        let previous_config_version =
+            utils::previous_installed_version(&self.config_root_dir, current_version)?;
+        if previous_config_version != previous_binary_version {
+            warn!(%previous_binary_version, %previous_config_version, "previous version mismatch");
+            bail!(
+                "previous binary version {} != previous config version {}",
+                previous_binary_version,
+                previous_config_version,
+            );
+        }
+        Ok(previous_binary_version)
+    }
+
     /// Constructs a new `NodeInfo` based on the given version.
     fn new_node_info(&self, version: Version) -> NodeInfo {
         let subdir_name = version.to_string().replace(".", "_");
@@ -250,10 +269,12 @@ impl Launcher {
         }
     }
 
-    /// Moves the launcher state forward.  If it's currently `RunNodeAsValidator`, then finds the
-    /// highest installed version and moves to `MigrateData` if that version is newer (else errors).
-    /// If it's currently `MigrateData`, moves to `RunNodeAsValidator` using the newest version.
-    fn transition_state(&mut self) -> Result<()> {
+    /// Sets `self.state` to a new state corresponding to upgrading the current node version.
+    ///
+    /// If `self.state` is currently `RunNodeAsValidator`, then finds the next installed version
+    /// and moves to `MigrateData` if that version is newer (else errors).  If it's currently
+    /// `MigrateData`, moves to `RunNodeAsValidator` using the next installed version.
+    fn upgrade_state(&mut self) -> Result<()> {
         let new_state = match mem::take(&mut self.state) {
             State::RunNodeAsValidator(old_info) => {
                 let next_version = self.next_installed_version(&old_info.version)?;
@@ -273,21 +294,55 @@ impl Launcher {
         };
 
         self.state = new_state;
-        self.write()?;
         Ok(())
+    }
+
+    /// Sets `self.state` to a new state corresponding to downgrading the current node version.
+    ///
+    /// Regardless of the current state variant, the returned state is `RunNodeAsValidator` with the
+    /// previous installed version.
+    fn downgrade_state(&mut self) -> Result<()> {
+        let node_info = match &self.state {
+            State::RunNodeAsValidator(old_info) => old_info,
+            State::MigrateData { new_info, .. } => new_info,
+        };
+
+        let previous_version = self.previous_installed_version(&node_info.version)?;
+        if previous_version >= node_info.version {
+            let msg = format!(
+                "no lower version than current {} installed",
+                node_info.version
+            );
+            warn!("{}", msg);
+            bail!(msg);
+        }
+
+        let new_info = self.new_node_info(previous_version);
+        self.state = State::RunNodeAsValidator(new_info);
+        Ok(())
+    }
+
+    /// Moves the launcher state forward.
+    fn transition_state(&mut self, previous_exit_code: NodeExitCode) -> Result<()> {
+        match previous_exit_code {
+            NodeExitCode::Success => self.upgrade_state()?,
+            NodeExitCode::ShouldDowngrade => self.downgrade_state()?,
+        }
+        self.write()
     }
 
     /// Runs the process for the current state and moves the state forward if the process exits with
     /// success.
     fn step(&mut self) -> Result<()> {
-        match &self.state {
+        let exit_code = match &self.state {
             State::RunNodeAsValidator(node_info) => {
                 let mut command = Command::new(&node_info.binary_path);
                 command
                     .arg(VALIDATOR_SUBCOMMAND)
                     .arg(&node_info.config_path);
-                utils::run_command(command)?;
+                let exit_code = utils::run_node(command)?;
                 info!(version=%node_info.version, "finished running node as validator");
+                exit_code
             }
             State::MigrateData { old_info, new_info } => {
                 let mut command = Command::new(&new_info.binary_path);
@@ -297,16 +352,17 @@ impl Launcher {
                     .arg(&old_info.config_path)
                     .arg(NEW_CONFIG_ARG)
                     .arg(&new_info.config_path);
-                utils::run_command(command)?;
+                let exit_code = utils::run_node(command)?;
                 info!(
                     old_version=%old_info.version,
                     new_version=%new_info.version,
                     "finished data migration"
                 );
+                exit_code
             }
-        }
+        };
 
-        self.transition_state()
+        self.transition_state(exit_code)
     }
 }
 
@@ -318,6 +374,7 @@ mod tests {
     use crate::logging;
 
     const NODE_CONTENTS: &str = include_str!("../test_resources/casper-node.in");
+    const DOWNGRADE_CONTENTS: &str = include_str!("../test_resources/downgrade.in");
     /// The duration to wait after starting a mock casper-node instance before "installing" a new
     /// version of the mock node.  The mock sleeps for 1 second while running in validator mode, so
     /// 100ms should be enough to allow the node-launcher step to start.
@@ -326,9 +383,12 @@ mod tests {
     static V2: Lazy<Version> = Lazy::new(|| Version::new(2, 0, 0));
     static V3: Lazy<Version> = Lazy::new(|| Version::new(3, 0, 0));
 
-    /// Installs the new version of the mock node binary, assigning an old version for the script
-    /// with the major version of `new_version` decremented by 1.
-    fn install_mock(new_version: &Version) {
+    /// If `upgrade` is true, installs the new version of the mock node binary, assigning an old
+    /// version for the script with the major version of `new_version` decremented by 1.
+    ///
+    /// If `upgrade` is false, installs a copy of the downgrade.sh script in place of the mock node
+    /// script.  This script always exits with a code of 102.
+    fn install_mock(new_version: &Version, upgrade: bool) {
         if thread::current().name().is_none() {
             panic!(
                 "install_mock must be called from the main test thread in order for \
@@ -340,7 +400,12 @@ mod tests {
 
         // Create the node script contents.
         let old_version = Version::new(new_version.major - 1, new_version.minor, new_version.patch);
-        let node_contents = NODE_CONTENTS.replace(
+        let node_contents = if upgrade {
+            NODE_CONTENTS
+        } else {
+            DOWNGRADE_CONTENTS
+        };
+        let node_contents = node_contents.replace(
             r#"OLD_VERSION="""#,
             &format!(r#"OLD_VERSION="{}""#, old_version),
         );
@@ -393,7 +458,7 @@ mod tests {
     fn should_write_state_on_first_run() {
         let _ = logging::init();
 
-        install_mock(&*V1);
+        install_mock(&*V1, true);
         let launcher = Launcher::new().unwrap();
         assert!(launcher.state_path().exists());
 
@@ -413,12 +478,12 @@ mod tests {
         let _ = logging::init();
 
         // Write the state to disk (RunNodeAsValidator for V1).
-        install_mock(&*V1);
+        install_mock(&*V1, true);
         let _ = Launcher::new().unwrap();
 
         // Install a new version of node, but ensure a new launcher reads the state from disk rather
         // than detecting a new version.
-        install_mock(&*V2);
+        install_mock(&*V2, true);
         let launcher = Launcher::new().unwrap();
 
         let expected_node_info = launcher.new_node_info(V1.clone());
@@ -431,7 +496,7 @@ mod tests {
         let _ = logging::init();
 
         // Write the state to disk (RunNodeAsValidator for V1).
-        install_mock(&*V1);
+        install_mock(&*V1, true);
         let launcher = Launcher::new().unwrap();
 
         // Corrupt the stored state.
@@ -461,51 +526,27 @@ mod tests {
     fn should_run_upgrades() {
         let _ = logging::init();
 
-        // Set up the test folders as if casper-node has just been installed at v1.0.0.
-        install_mock(&*V1);
+        // Set up the test folders as if casper-node has just been installed at v3.0.0.
+        install_mock(&*V1, true);
+        install_mock(&*V2, true);
+        install_mock(&*V3, true);
 
-        // Set up a thread to run the launcher's first two steps.
         let mut launcher = Launcher::new().unwrap();
-        let worker = thread::spawn(move || {
-            // Run the launcher's first step - should run node v1.0.0 in validator mode, taking 1
-            // second to complete.
-            launcher.step().unwrap();
-            assert_last_log_line_eq(&launcher, "Node v1.0.0 ran as validator");
+        // Run the launcher's first step - should run node v1.0.0 in validator mode.
+        launcher.step().unwrap();
+        assert_last_log_line_eq(&launcher, "Node v1.0.0 ran as validator");
 
-            // Run the launcher's second step - should run node v2.0.0 in data-migration mode,
-            // completing immediately.
-            launcher.step().unwrap();
-            assert_last_log_line_eq(&launcher, "Node v2.0.0 migrated data");
+        // Run the launcher's second step - should run node v2.0.0 in data-migration mode.
+        launcher.step().unwrap();
+        assert_last_log_line_eq(&launcher, "Node v2.0.0 migrated data");
 
-            launcher
-        });
+        // Run the launcher's third step - should run node v2.0.0 in validator mode.
+        launcher.step().unwrap();
+        assert_last_log_line_eq(&launcher, "Node v2.0.0 ran as validator");
 
-        // Install node v2.0.0 after v1.0.0 has started running.
-        thread::sleep(DELAY_INSTALL_DURATION);
-        install_mock(&*V2);
-
-        launcher = worker.join().unwrap();
-
-        // Set up a thread to run the launcher's next two steps.
-        let worker = thread::spawn(move || {
-            // Run the launcher's third step - should run node v2.0.0 in validator mode, taking 1
-            // second to complete.
-            launcher.step().unwrap();
-            assert_last_log_line_eq(&launcher, "Node v2.0.0 ran as validator");
-
-            // Run the launcher's fourth step - should run node v3.0.0 in data-migration mode,
-            // completing immediately.
-            launcher.step().unwrap();
-            assert_last_log_line_eq(&launcher, "Node v3.0.0 migrated data");
-
-            launcher
-        });
-
-        // Install node v3.0.0 after v2.0.0 has started running.
-        thread::sleep(DELAY_INSTALL_DURATION);
-        install_mock(&*V3);
-
-        launcher = worker.join().unwrap();
+        // Run the launcher's fourth step - should run node v3.0.0 in data-migration mode.
+        launcher.step().unwrap();
+        assert_last_log_line_eq(&launcher, "Node v3.0.0 migrated data");
 
         // Run the launcher's fifth step - should run node v3.0.0 in validator mode.  As there
         // will be no further upgraded binary available after the node exits, the step should return
@@ -519,7 +560,7 @@ mod tests {
     fn should_not_upgrade_to_lower_version() {
         let _ = logging::init();
 
-        install_mock(&*V2);
+        install_mock(&*V2, true);
 
         // Set up a thread to run the launcher.
         let mut launcher = Launcher::new().unwrap();
@@ -533,7 +574,76 @@ mod tests {
 
         // Install node v1.0.0 after v2.0.0 has started running.
         thread::sleep(DELAY_INSTALL_DURATION);
-        install_mock(&*V1);
+        install_mock(&*V1, true);
+
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn should_run_downgrades() {
+        let _ = logging::init();
+
+        // Set up the test folders so that v3.0.0 is installed, but it will exit requesting a
+        // downgrade.
+        install_mock(&*V3, false);
+
+        // Set up a thread to run the launcher.
+        let mut launcher = Launcher::new().unwrap();
+        let worker = thread::spawn(move || {
+            // Run the launcher's first step - should run the downgrader, taking 1 second to
+            // complete.
+            launcher.step().unwrap();
+            assert_last_log_line_eq(&launcher, "Node v3.0.0 exiting to downgrade");
+            launcher
+        });
+
+        // Install node v2.0.0 also as a downgrader after v3.0.0 has started running.
+        thread::sleep(DELAY_INSTALL_DURATION);
+        install_mock(&*V2, false);
+
+        launcher = worker.join().unwrap();
+
+        // Set up a thread to run the launcher again.
+        let worker = thread::spawn(move || {
+            // Run the launcher's second step - should run the downgrader, taking 1 second to
+            // complete.
+            launcher.step().unwrap();
+            assert_last_log_line_eq(&launcher, "Node v2.0.0 exiting to downgrade");
+            launcher
+        });
+
+        // Install node v2.0.0 also as a downgrader after v3.0.0 has started running.
+        thread::sleep(DELAY_INSTALL_DURATION);
+        install_mock(&*V1, true);
+
+        launcher = worker.join().unwrap();
+
+        // Run the launcher's third step - should run node v1.0.0 in validator mode.
+        launcher.step().unwrap();
+        assert_last_log_line_eq(&launcher, "Node v1.0.0 ran as validator");
+    }
+
+    #[test]
+    fn should_not_downgrade_to_higher_version() {
+        let _ = logging::init();
+
+        // Set up the test folders so that v2.0.0 is installed, but it will exit requesting a
+        // downgrade.
+        install_mock(&*V2, false);
+
+        // Set up a thread to run the launcher.
+        let mut launcher = Launcher::new().unwrap();
+        let worker = thread::spawn(move || {
+            // Run the launcher's first step - should run the downgrader, taking 1 second to
+            // complete, but then fail to find an older installed version.
+            let error = launcher.step().unwrap_err().to_string();
+            assert_last_log_line_eq(&launcher, "Node v2.0.0 exiting to downgrade");
+            assert_eq!("no lower version than current 2.0.0 installed", error);
+        });
+
+        // Install node v3.0.0 after v2.0.0 has started running.
+        thread::sleep(DELAY_INSTALL_DURATION);
+        install_mock(&*V3, true);
 
         worker.join().unwrap();
     }
@@ -544,7 +654,7 @@ mod tests {
 
         // Set up the test folders as if casper-node has just been installed, but provide a config
         // file which will cause the node to crash as soon as it starts.
-        install_mock(&*V1);
+        install_mock(&*V1, true);
         let mut launcher = Launcher::new().unwrap();
         let node_info = launcher.new_node_info(V1.clone());
         let bad_value = "bad value";
@@ -573,7 +683,7 @@ mod tests {
         let _ = logging::init();
 
         // Set up the test folders as if casper-node has just been installed.
-        install_mock(&*V1);
+        install_mock(&*V1, true);
 
         // Set up a thread to run the launcher's first two steps.
         let mut launcher = Launcher::new().unwrap();
@@ -601,7 +711,7 @@ mod tests {
         // Install node v2.0.0 after v1.0.0 has started running, but provide a config file which
         // will cause the node to crash as soon as it starts.
         thread::sleep(DELAY_INSTALL_DURATION);
-        install_mock(&*V2);
+        install_mock(&*V2, true);
         fs::write(&node_v2_info.config_path, bad_value.as_bytes()).unwrap();
 
         launcher = worker.join().unwrap();
@@ -617,7 +727,7 @@ mod tests {
     fn should_error_if_bin_and_config_have_different_versions() {
         let _ = logging::init();
 
-        install_mock(&*V1);
+        install_mock(&*V1, true);
         // Rename the config folder to 2_0_0.
         fs::rename(
             Launcher::config_root_dir().join("1_0_0"),

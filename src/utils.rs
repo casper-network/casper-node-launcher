@@ -4,6 +4,16 @@ use anyhow::{bail, Error, Result};
 use semver::Version;
 use tracing::{debug, warn};
 
+/// Represents the exit code of the node process.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+#[repr(i32)]
+pub enum NodeExitCode {
+    /// Indicates a successful execution.
+    Success = 0,
+    /// Indicates the node version should be downgraded.
+    ShouldDowngrade = 102,
+}
+
 /// Iterates the given path, returning the subdir representing the immediate next SemVer version
 /// after `current_version`.
 ///
@@ -12,7 +22,43 @@ pub fn next_installed_version(dir: &Path, current_version: &Version) -> Result<V
     let max_version = Version::new(u64::max_value(), u64::max_value(), u64::max_value());
 
     let mut next_version = max_version.clone();
-    let mut read_version = false;
+    for installed_version in versions_from_path(dir)? {
+        if installed_version > *current_version && installed_version < next_version {
+            next_version = installed_version;
+        }
+    }
+
+    if next_version == max_version {
+        next_version = current_version.clone();
+    }
+
+    Ok(next_version)
+}
+
+/// Iterates the given path, returning the subdir representing the immediate previous SemVer version
+/// before `current_version`.
+///
+/// Subdir names should be semvers with dots replaced with underscores.
+pub fn previous_installed_version(dir: &Path, current_version: &Version) -> Result<Version> {
+    let min_version = Version::new(0, 0, 0);
+
+    let mut previous_version = min_version.clone();
+    for installed_version in versions_from_path(dir)? {
+        if installed_version < *current_version && installed_version > previous_version {
+            previous_version = installed_version;
+        }
+    }
+
+    if previous_version == min_version {
+        previous_version = current_version.clone();
+    }
+
+    Ok(previous_version)
+}
+
+fn versions_from_path(dir: &Path) -> Result<Vec<Version>> {
+    let mut versions = vec![];
+
     for entry in map_and_log_error(
         fs::read_dir(dir),
         format!("failed to read dir {}", dir.display()),
@@ -34,13 +80,10 @@ pub fn next_installed_version(dir: &Path, current_version: &Version) -> Result<V
             }
         };
 
-        if version > *current_version && version < next_version {
-            next_version = version;
-        }
-        read_version = true;
+        versions.push(version);
     }
 
-    if !read_version {
+    if versions.is_empty() {
         let msg = format!(
             "failed to get a valid version from subdirs in {}",
             dir.display()
@@ -49,15 +92,11 @@ pub fn next_installed_version(dir: &Path, current_version: &Version) -> Result<V
         bail!(msg);
     }
 
-    if next_version == max_version {
-        next_version = current_version.clone();
-    }
-
-    Ok(next_version)
+    Ok(versions)
 }
 
 /// Runs the given command as a child process.
-pub fn run_command(mut command: Command) -> Result<()> {
+pub fn run_node(mut command: Command) -> Result<NodeExitCode> {
     let mut child = map_and_log_error(command.spawn(), format!("failed to execute {:?}", command))?;
     crate::CHILD_PID.store(child.id(), Ordering::SeqCst);
 
@@ -65,13 +104,20 @@ pub fn run_command(mut command: Command) -> Result<()> {
         child.wait(),
         format!("failed to wait for completion of {:?}", command),
     )?;
-    if !exit_status.success() {
-        warn!(%exit_status, "failed running {:?}", command);
-        bail!("{:?} exited with error", command);
+    match exit_status.code() {
+        Some(code) if code == NodeExitCode::Success as i32 => {
+            debug!("successfully finished running {:?}", command);
+            Ok(NodeExitCode::Success)
+        }
+        Some(code) if code == NodeExitCode::ShouldDowngrade as i32 => {
+            debug!("finished running {:?} - should downgrade now", command);
+            Ok(NodeExitCode::ShouldDowngrade)
+        }
+        _ => {
+            warn!(%exit_status, "failed running {:?}", command);
+            bail!("{:?} exited with error", command);
+        }
     }
-
-    debug!("successfully finished running {:?}", command);
-    Ok(())
 }
 
 /// Maps an error to a different type of error, while also logging the error at warn level.
@@ -177,7 +223,7 @@ mod tests {
         // Try with a non-existent binary.
         let non_existent_binary = "non-existent-binary";
         let mut command = Command::new(non_existent_binary);
-        let error = run_command(command).unwrap_err().to_string();
+        let error = run_node(command).unwrap_err().to_string();
         assert_eq!(
             format!(r#"failed to execute "{}""#, non_existent_binary),
             error
@@ -187,7 +233,7 @@ mod tests {
         let cargo = env!("CARGO");
         command = Command::new(cargo);
         command.arg("--deliberately-passing-bad-arg-for-test");
-        let error = run_command(command).unwrap_err().to_string();
+        let error = run_node(command).unwrap_err().to_string();
         assert!(error.ends_with("exited with error"), "{}", error);
     }
 
@@ -198,6 +244,17 @@ mod tests {
         let cargo = env!("CARGO");
         let mut command = Command::new(cargo);
         command.arg("--version");
-        run_command(command).unwrap();
+        assert_eq!(run_node(command).unwrap(), NodeExitCode::Success);
+    }
+
+    #[test]
+    fn should_run_command_exiting_with_downgrade_code() {
+        let _ = logging::init();
+
+        let script_path = format!("{}/test_resources/downgrade.sh", env!("CARGO_MANIFEST_DIR"));
+
+        let mut command = Command::new("sh");
+        command.arg(&script_path);
+        assert_eq!(run_node(command).unwrap(), NodeExitCode::ShouldDowngrade);
     }
 }

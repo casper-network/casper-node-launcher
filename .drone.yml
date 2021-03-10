@@ -95,13 +95,14 @@ steps:
       CL_VAULT_HOST:
         from_secret: vault_host
 
-  - name: build-casper-node-launcher-build
+  - name: build-docker
     image: docker:stable
     commands:
       - apk add git bash
       - ./ci/build_docker.sh
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - name: "/var/run/docker.sock"
+        path: "/var/run/docker.sock"
 
   - name: push-docker
     image: docker:stable
@@ -109,10 +110,13 @@ steps:
       - apk add git bash
       - ./ci/push-docker.sh
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    secrets:
-      - docker_username
-      - docker_password
+      - name: "/var/run/docker.sock"
+        path: "/var/run/docker.sock"
+    environment:
+      DOCKER_USERNAME:
+        from_secret: docker_username
+      DOCKER_PASSWORD:
+        from_secret: docker_password
 
 trigger:
   ref:

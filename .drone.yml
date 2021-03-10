@@ -37,7 +37,12 @@ steps:
       - ./ci/build_docker.sh
     volumes:
       - name: docker_sock
-        path: "/var/run/docker.sock"
+        path: /var/run/docker.sock
+
+volumes:
+  - name: docker_sock
+    host:
+      path: /var/run/docker.sock
 
 trigger:
   branch:
@@ -111,7 +116,7 @@ steps:
       - ./ci/build_docker.sh
     volumes:
       - name: docker_sock
-        path: "/var/run/docker.sock"
+        path: /var/run/docker.sock
 
   - name: push-docker
     image: docker:stable
@@ -120,12 +125,17 @@ steps:
       - ./ci/push-docker.sh
     volumes:
       - name: docker_sock
-        path: "/var/run/docker.sock"
+        path: /var/run/docker.sock
     environment:
       DOCKER_USERNAME:
         from_secret: docker_username
       DOCKER_PASSWORD:
         from_secret: docker_password
+
+volumes:
+  - name: docker_sock
+    host:
+      path: /var/run/docker.sock
 
 trigger:
   ref:

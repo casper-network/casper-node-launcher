@@ -122,7 +122,7 @@ steps:
     image: docker:stable
     commands:
       - apk add git bash
-      - ./ci/push-docker.sh
+      - ./ci/push_docker.sh
     volumes:
       - name: docker_sock
         path: /var/run/docker.sock

@@ -7,7 +7,7 @@ set -e
 
 if [ -z "$1" ]; then
   echo "Error: version argument missing"
-  echo "Expected argument containing semantic version of casper_node with underscores as 1_0_2."
+  echo "Expected argument containing semantic version of casper_node with underscores such as 1_0_2."
   exit 1
 fi
 
@@ -30,16 +30,6 @@ fi
 ETC_FULL_PATH="$ETC_PATH/$SEMVER"
 BIN_FULL_PATH="$BIN_PATH/$SEMVER"
 
-if [ -d "$ETC_FULL_PATH" ]; then
-  echo "Error: config version path $ETC_FULL_PATH already exists. Aborting."
-  exit 4
-fi
-
-if [ -d "$BIN_FULL_PATH" ]; then
-  echo "Error: bin version path $BIN_FULL_PATH already exists. Aborting."
-  exit 5
-fi
-
 BASE_URL="http://genesis.casperlabs.io/$NETWORK/$SEMVER"
 CONFIG_ARCHIVE="config.tar.gz"
 CONFIG_URL="$BASE_URL/$CONFIG_ARCHIVE"
@@ -48,13 +38,35 @@ BIN_URL="$BASE_URL/$BIN_ARCHIVE"
 
 cd $ETC_PATH
 
+echo "Verifying semver Path"
+curl -I 2>/dev/null "$CONFIG_URL" | head -1 | grep 404 >/dev/null
+if [ $? == 0 ]; then
+  echo "$CONFIG_URL not found.  Please verify provided semver argument: $SEMVER"
+  exit 4
+fi
+curl -I 2>/dev/null "$BIN_URL" | head -1 | grep 404 >/dev/null
+if [ $? == 0 ]; then
+  echo "$BIN_URL not found.  Please verify provided semver argument: $SEMVER"
+  exit 5
+fi
+
+if [ -d "$ETC_FULL_PATH" ]; then
+  echo "Error: config version path $ETC_FULL_PATH already exists. Aborting."
+  exit 6
+fi
+
+if [ -d "$BIN_FULL_PATH" ]; then
+  echo "Error: bin version path $BIN_FULL_PATH already exists. Aborting."
+  exit 7
+fi
+
 echo "Downloading $CONFIG_ARCHIVE from $CONFIG_URL"
 if curl -JLO "$CONFIG_URL"; then
   echo "Complete"
 else
   echo "Error: unable to pull $CONFIG_ARCHIVE from $CONFIG_URL."
   echo "File probably doesn't exist.  Please verify version used: $SEMVER"
-  exit 6
+  exit 8
 fi
 CONFIG_ARCHIVE_PATH="$ETC_PATH/$CONFIG_ARCHIVE"
 
@@ -64,7 +76,7 @@ if curl -JLO "$BIN_URL"; then
 else
   echo "Error: unable to pull $BIN_ARCHIVE from $BIN_URL"
   echo "File probably doesn't exist.  Please verify version used: $SEMVER"
-  exit 7
+  exit 9
 fi
 BIN_ARCHIVE_PATH="$ETC_PATH/$BIN_ARCHIVE"
 

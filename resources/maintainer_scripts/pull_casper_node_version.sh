@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -e
-
 # This script will pull casper-node software and associated files required to run or upgrade
 # casper-node.
 
@@ -96,7 +94,3 @@ echo "Removing $CONFIG_ARCHIVE_PATH"
 rm "$CONFIG_ARCHIVE_PATH"
 
 echo "Process Complete."
-echo ""
-echo "Creating $ETC_FULL_PATH/config.toml by using config_from_example.sh."
-cd "$ETC_PATH"
-./config_from_example.sh $SEMVER

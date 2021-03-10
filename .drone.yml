@@ -30,6 +30,20 @@ steps:
     commands:
       - cargo deb
 
+  - name: build-docker
+    image: docker:stable
+    commands:
+      - apk add git bash
+      - ./ci/build_docker.sh
+    volumes:
+      - name: docker_sock
+        path: /var/run/docker.sock
+
+volumes:
+  - name: docker_sock
+    host:
+      path: /var/run/docker.sock
+
 trigger:
   branch:
     - main
@@ -94,6 +108,34 @@ steps:
         from_secret: vault_token
       CL_VAULT_HOST:
         from_secret: vault_host
+
+  - name: build-docker
+    image: docker:stable
+    commands:
+      - apk add git bash
+      - ./ci/build_docker.sh
+    volumes:
+      - name: docker_sock
+        path: /var/run/docker.sock
+
+  - name: push-docker
+    image: docker:stable
+    commands:
+      - apk add git bash
+      - ./ci/push-docker.sh
+    volumes:
+      - name: docker_sock
+        path: /var/run/docker.sock
+    environment:
+      DOCKER_USERNAME:
+        from_secret: docker_username
+      DOCKER_PASSWORD:
+        from_secret: docker_password
+
+volumes:
+  - name: docker_sock
+    host:
+      path: /var/run/docker.sock
 
 trigger:
   ref:

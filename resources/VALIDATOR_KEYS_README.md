@@ -2,9 +2,9 @@
 
 Keys should be created by running (assuming you are in this directory for local path "."):
 
-`sudo casper-client keygen .`
+`sudo -u casper casper-client keygen .`
 
-This will create `public_key_hex`, `public_key.pem`, and `secret_key.pem`.
+This will create `public_key_hex`, `public_key.pem`, and `secret_key.pem` owned by the casper user.
 
 Note there is no difference between validator keys and account keys.  
 The `keygen` subcommand can be used to create account keys. There are also

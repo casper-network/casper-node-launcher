@@ -3,15 +3,23 @@
 # This script will pull casper-node software and associated files required to run or upgrade
 # casper-node.
 
+
 if [ -z "$1" ]; then
-  echo "Error: version argument missing"
-  echo "Expected argument containing semantic version of casper_node with underscores such as 1_0_2."
+  echo "Error: arguments missing"
+  echo "Expected $0 <Semantic Version> <Network Name>"
+  echo "Example: $0 1_0_0 mainnet"
   exit 1
 fi
 
+if [ -z "$2" ]; then
+  echo "Error: arguments missing"
+  echo "Expected $0 <Semantic Version> <Network Name>"
+  echo "Example: $0 1_0_0 mainnet"
+  exit 10
+fi
+
 SEMVER=$1
-# Default to delta if network is not sent as second argument
-NETWORK=${2:-delta}
+NETWORK=$2
 ETC_PATH="/etc/casper"
 BIN_PATH="/var/lib/casper/bin"
 
@@ -39,12 +47,12 @@ cd $ETC_PATH
 echo "Verifying semver Path"
 curl -I 2>/dev/null "$CONFIG_URL" | head -1 | grep 404 >/dev/null
 if [ $? == 0 ]; then
-  echo "$CONFIG_URL not found.  Please verify provided semver argument: $SEMVER"
+  echo "$CONFIG_URL not found.  Please verify provided arguments"
   exit 4
 fi
 curl -I 2>/dev/null "$BIN_URL" | head -1 | grep 404 >/dev/null
 if [ $? == 0 ]; then
-  echo "$BIN_URL not found.  Please verify provided semver argument: $SEMVER"
+  echo "$BIN_URL not found.  Please verify provided arguments"
   exit 5
 fi
 
@@ -63,7 +71,7 @@ if curl -JLO "$CONFIG_URL"; then
   echo "Complete"
 else
   echo "Error: unable to pull $CONFIG_ARCHIVE from $CONFIG_URL."
-  echo "File probably doesn't exist.  Please verify version used: $SEMVER"
+  echo "File probably doesn't exist.  Please verify provided arguments"
   exit 8
 fi
 CONFIG_ARCHIVE_PATH="$ETC_PATH/$CONFIG_ARCHIVE"
@@ -73,7 +81,7 @@ if curl -JLO "$BIN_URL"; then
   echo "Complete"
 else
   echo "Error: unable to pull $BIN_ARCHIVE from $BIN_URL"
-  echo "File probably doesn't exist.  Please verify version used: $SEMVER"
+  echo "File probably doesn't exist.  Please verify provided arguments"
   exit 9
 fi
 BIN_ARCHIVE_PATH="$ETC_PATH/$BIN_ARCHIVE"

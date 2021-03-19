@@ -4,7 +4,7 @@ This package runs the casper-node software and handles changing execution to new
 determined times based on configuration.  This allows simultaneous upgrading of all nodes on the
 network.
 
-Please refer to docs.casperlabs.io for information on how to run a node.
+Please refer to http://docs.casperlabs.io for information on how to run a node.
 
 ## systemd
 
@@ -25,7 +25,7 @@ Logs are created in `/var/log/casper/casper-node.log`.
 
 Log rotation is setup in `/etc/logrotate.d/casper-node`.
 
-Logs can be viewed with `cat /var/log/casper/casper-node.log`.  
+Logs can be viewed with `sudo cat /var/log/casper/casper-node.log`.  
 
 The logs are in 'json' format.
 
@@ -35,7 +35,7 @@ Teardown crash logs are created in '/var/log/casper/casper-node.stderr.log'.
 
 These use the same log rotation as `casper-node.log`.
 
-Crash logs can be viewed with `cat /var/log/casper/casper-node.strerr.log`.
+Crash logs can be viewed with `sudo cat /var/log/casper/casper-node.strerr.log`.
 
 
 ### Starting and stopping services
@@ -57,7 +57,7 @@ you can use the script in `/etc/casper` with `sudo /etc/casper/delete_local_db.s
 
 Upgrading is done by staging a new casper-node and configuration prior to the agreed upgrade era.
 
-To simplify this, the `/etc/casper/pull_casper_node_version.sh [semver]` script is included.  This will
+To simplify this, the `sudo -u casper /etc/casper/pull_casper_node_version.sh [semver] [network]` script is included.  This will
 pull files from the appropriate version.  If desired, the casper-node can be built from source at the 
 same version.
 

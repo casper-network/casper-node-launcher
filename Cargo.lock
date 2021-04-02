@@ -75,7 +75,7 @@ checksum = "ae44d1a3d5a19df61dd0c8beb138458ac2a53a7ac09eba97d55592540004306b"
 
 [[package]]
 name = "casper-node-launcher"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "backtrace",

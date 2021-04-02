@@ -3,6 +3,15 @@
 # This script will pull casper-node software and associated files required to run or upgrade
 # casper-node.
 
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# This should set source_url var
+source "$DIR/pull_casper_node_version.conf"
+
+if [ "$source_url" == "" ]; then
+  echo "Error: source_url not set and expected from 'pull_casper_node_version.conf'."
+  exit 11
+fi
 
 if [ -z "$1" ]; then
   echo "Error: arguments missing"

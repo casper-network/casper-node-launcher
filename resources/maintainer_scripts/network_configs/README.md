@@ -2,8 +2,8 @@
 
 Network configurations should be of the format:
 ```
-source_url=<url for packages>
-network_name=<name of network>
+SOURCE_URL=<url for packages>
+NETWORK_NAME=<name of network>
 ```
 It is recommended that network_name used is the same as the <network_name>.conf.  This will be executed as 
 `source "$DIR/network_configs/<config_file>.conf` to load these variables.
@@ -19,8 +19,8 @@ Example:
 
 With `casper.conf` of:
 ```
-source_url=genesis.casperlabs.io
-network_name=casper
+SOURCE_URL=genesis.casperlabs.io
+NETWORK_NAME=casper
 ```
 
 Will perform:

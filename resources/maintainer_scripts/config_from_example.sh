@@ -22,42 +22,71 @@ if [ ! -f "$CONFIG_EXAMPLE" ]; then
   exit 2
 fi
 
-IPv4_STRING='(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)'
-
-re='^(0*(1?[0-9]{1,2}|2([0-4][0-9]|5[0-5]))\.){3}'
-
-function curl_ext_ip()
+function valid_ip()
 {
-  result=$(curl -s --max-time 10 --connect-timeout 10 "$1") || result='dead pipe'
+    local  ip=$1
+    local  stat=1
+
+    if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        OIFS=$IFS
+        IFS='.'
+        ip=($ip)
+        IFS=$OIFS
+        [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 \
+            && ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
+        stat=$?
+    fi
+    return $stat
 }
 
-URLS=("https://checkip.amazonaws.com" "https://ifconfig.me" "https://ident.me")
-NAMES=("amazonaws.com" "ifconfig.me" "ident.me")
-RESULTS=()
-array_len=${#URLS[@]}
+if [ -z "$2" ]; then
+  # IP to be detected
+  IPv4_STRING='(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)'
 
-echo && echo -e "Trying to get external IP from couple of services ..."
+  re='^(0*(1?[0-9]{1,2}|2([0-4][0-9]|5[0-5]))\.){3}'
 
-for (( i=0; i<$array_len; i++ )); do
-  curl_ext_ip "${URLS[$i]}"
-  if [[ $result != "dead pipe" ]]; then
-    RESULTS+=($result)
+  function curl_ext_ip()
+  {
+    result=$(curl -s --max-time 10 --connect-timeout 10 "$1") || result='dead pipe'
+  }
+
+  URLS=("https://checkip.amazonaws.com" "https://ifconfig.me" "https://ident.me")
+  NAMES=("amazonaws.com" "ifconfig.me" "ident.me")
+  RESULTS=()
+  array_len=${#URLS[@]}
+
+  echo && echo -e "Trying to get external IP from couple of services ..."
+
+  for (( i=0; i<$array_len; i++ )); do
+    curl_ext_ip "${URLS[$i]}"
+    if [[ $result != "dead pipe" ]]; then
+      RESULTS+=($result)
+    fi
+    echo -e "${NAMES[$i]} report: $result"
+  done
+
+  EXTERNAL_IP=$(echo "${RESULTS[@]}" | awk '{for(i=1;i<=NF;i++) print $i}' | awk '!x[$0]++' | grep -E -o "$IPv4_STRING" | head -n 1)
+
+  if ! [[ $EXTERNAL_IP =~ $re ]]; then
+   echo
+   echo "WARNING: Can't get external VPS IP automatically."
+   echo "Run script again with '$0 $1 <external ip address>'"
+   echo
+   exit 3
+  else
+   echo && echo -e "Using External IP: $EXTERNAL_IP" && echo
   fi
-  echo -e "${NAMES[$i]} report: $result"
-done
 
-EXTERNAL_IP=$(echo "${RESULTS[@]}" | awk '{for(i=1;i<=NF;i++) print $i}' | awk '!x[$0]++' | grep -E -o "$IPv4_STRING" | head -n 1)
-
-if ! [[ $EXTERNAL_IP =~ $re ]]; then
- echo -e
- echo -e "WARNING: Can't get external VPS IP automatically."
- echo -e "Please manually create $CONFIG from $CONFIG_EXAMPLE"
- echo -e "by replacing <IP_ADDRESS> with your external IP after installation."
- echo
- sleep 2
- exit 0
 else
- echo && echo -e "Using External IP: $EXTERNAL_IP" && echo
+  # IP passed into script
+  EXTERNAL_IP=$2
+  if valid_ip $EXTERNAL_IP; then
+    echo "Using provided IP: $EXTERNAL_IP"
+  else
+    echo "Error: Provided IP: $EXTERNAL_IP is invalid. Expected IPv4 address."
+    exit 4
+  fi
+
 fi
 
 OUTFILE=$CONFIG

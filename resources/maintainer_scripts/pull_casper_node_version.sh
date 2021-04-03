@@ -3,49 +3,62 @@
 # This script will pull casper-node software and associated files required to run or upgrade
 # casper-node.
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
-# This should set source_url var
-source "$DIR/pull_casper_node_version.conf"
-
-if [ "$source_url" == "" ]; then
-  echo "Error: source_url not set and expected from 'pull_casper_node_version.conf'."
-  exit 11
-fi
-
 if [ -z "$1" ]; then
   echo "Error: arguments missing"
-  echo "Expected $0 <Semantic Version> <Network Name>"
-  echo "Example: $0 1_0_0 mainnet"
+  echo "Expected $0 <config filename in network_configs folder> <protocol version>"
+  echo "Example: $0 casper.conf 1_0_0"
   exit 1
 fi
 
 if [ -z "$2" ]; then
   echo "Error: arguments missing"
-  echo "Expected $0 <Semantic Version> <Network Name>"
-  echo "Example: $0 1_0_0 mainnet"
-  exit 10
+  echo "Expected $0 <config filename in network_configs folder> <protocol version>"
+  echo "Example: $0 casper.conf 1_0_0"
+  exit 2
 fi
 
-SEMVER=$1
-NETWORK=$2
+SEMVER=$2
+if [[ ! $SEMVER =~ ^[0-9]+_[0-9]+_[0-9]+ ]]; then
+  echo "Error: Illegal semver format. Please use <major>_<minor>_<patch> such as 1_0_0."
+  exit 3
+fi
+CONFIG="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/network_configs/$1"
+
+if [ ! -f "$CONFIG" ]; then
+  echo "Config file given: $CONFIG does not exist."
+  exit 4
+fi
+
+# This should set SOURCE_URL and NETWORK_NAME vars
+source "$CONFIG"
+
+if [ "$SOURCE_URL" == "" ]; then
+  echo "Error: source_url not set and expected from '$CONFIG'."
+  exit 5
+fi
+
+if [ "$NETWORK_NAME" == "" ]; then
+  echo "Error: network_name not set and expected from '$CONFIG'."
+  exit 6
+fi
+
 ETC_PATH="/etc/casper"
 BIN_PATH="/var/lib/casper/bin"
 
 if [ ! -d "$ETC_PATH" ]; then
   echo "Error: expected config file location $ETC_PATH not found."
-  exit 2
+  exit 7
 fi
 
 if [ ! -d "$BIN_PATH" ]; then
   echo "Error: expected bin file location $BIN_PATH not found."
-  exit 3
+  exit 8
 fi
 
 ETC_FULL_PATH="$ETC_PATH/$SEMVER"
 BIN_FULL_PATH="$BIN_PATH/$SEMVER"
 
-BASE_URL="http://genesis.casperlabs.io/$NETWORK/$SEMVER"
+BASE_URL="http://$SOURCE_URL/$NETWORK_NAME/$SEMVER"
 CONFIG_ARCHIVE="config.tar.gz"
 CONFIG_URL="$BASE_URL/$CONFIG_ARCHIVE"
 BIN_ARCHIVE="bin.tar.gz"
@@ -57,22 +70,22 @@ echo "Verifying semver Path"
 curl -I 2>/dev/null "$CONFIG_URL" | head -1 | grep 404 >/dev/null
 if [ $? == 0 ]; then
   echo "$CONFIG_URL not found.  Please verify provided arguments"
-  exit 4
+  exit 9
 fi
 curl -I 2>/dev/null "$BIN_URL" | head -1 | grep 404 >/dev/null
 if [ $? == 0 ]; then
   echo "$BIN_URL not found.  Please verify provided arguments"
-  exit 5
+  exit 10
 fi
 
 if [ -d "$ETC_FULL_PATH" ]; then
   echo "Error: config version path $ETC_FULL_PATH already exists. Aborting."
-  exit 6
+  exit 11
 fi
 
 if [ -d "$BIN_FULL_PATH" ]; then
   echo "Error: bin version path $BIN_FULL_PATH already exists. Aborting."
-  exit 7
+  exit 12
 fi
 
 echo "Downloading $CONFIG_ARCHIVE from $CONFIG_URL"
@@ -81,7 +94,7 @@ if curl -JLO "$CONFIG_URL"; then
 else
   echo "Error: unable to pull $CONFIG_ARCHIVE from $CONFIG_URL."
   echo "File probably doesn't exist.  Please verify provided arguments"
-  exit 8
+  exit 13
 fi
 CONFIG_ARCHIVE_PATH="$ETC_PATH/$CONFIG_ARCHIVE"
 
@@ -91,7 +104,7 @@ if curl -JLO "$BIN_URL"; then
 else
   echo "Error: unable to pull $BIN_ARCHIVE from $BIN_URL"
   echo "File probably doesn't exist.  Please verify provided arguments"
-  exit 9
+  exit 14
 fi
 BIN_ARCHIVE_PATH="$ETC_PATH/$BIN_ARCHIVE"
 

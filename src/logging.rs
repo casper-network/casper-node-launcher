@@ -14,10 +14,10 @@ pub fn init() -> Result<()> {
             .unwrap_or(DEFAULT_LOG_LEVEL),
     );
 
-    Ok(tracing_subscriber::fmt()
+    tracing_subscriber::fmt()
         .with_writer(io::stdout)
         .with_env_filter(filter)
         .json()
         .try_init()
-        .map_err(Error::msg)?)
+        .map_err(Error::msg)
 }

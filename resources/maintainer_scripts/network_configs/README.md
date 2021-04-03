@@ -53,7 +53,7 @@ tar -xzvf ../config_old.tar.gz
 ```
 
 You would need to customize `chainspec.toml` with a new network name and activation_point timestamp.
-You would need to customize `config-example.toml" with new known_addresses.
+You would need to customize `config-example.toml` with new known_addresses.
 
 Once all the configuration changes are done.  Create a new config.tar.gz from within the config directory.
 

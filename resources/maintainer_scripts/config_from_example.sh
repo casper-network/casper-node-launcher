@@ -8,7 +8,7 @@ USERNAME=casper
 if [ "$(whoami)" != "$USERNAME" ]; then
   echo
   echo "Script must be run as user: $USERNAME"
-  echo "Do this with 'sudo -u casper $0 <protocol_version> [optional external IP]'"
+  echo "Do this with 'sudo -u $USERNAME $0 <protocol_version> [optional external IP]'"
   echo
   exit 1
 fi

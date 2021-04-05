@@ -1,7 +1,7 @@
 [package]
 name = "casper-node-launcher"
-version = "0.3.2"
-authors = ["Fraser Hutchison <fraser@casperlabs.io>"]
+version = "0.3.3"
+authors = ["Fraser Hutchison <fraser@casperlabs.io>", "Joe Sacher <joe@casperlabs.io>"]
 edition = "2018"
 description = "A binary which runs and upgrades the casper-node of the Casper network"
 readme = "README.md"
@@ -36,6 +36,7 @@ assets = [
     ["./resources/BIN_README.md", "/var/lib/casper/bin/README.md", "755"],
     ["./resources/maintainer_scripts/logrotate.d/casper-node", "/etc/logrotate.d/casper-node", "644"],
     ["./resources/maintainer_scripts/pull_casper_node_version.sh", "/etc/casper/pull_casper_node_version.sh", "755"],
+    ["./resources/maintainer_scripts/network_configs/*", "/etc/casper/network_configs/", "644"],
     ["./resources/maintainer_scripts/delete_local_db.sh", "/etc/casper/delete_local_db.sh", "755"],
     ["./resources/maintainer_scripts/config_from_example.sh", "/etc/casper/config_from_example.sh", "755"],
     ["./resources/DEB_README.md", "/etc/casper/README.md", "644"],

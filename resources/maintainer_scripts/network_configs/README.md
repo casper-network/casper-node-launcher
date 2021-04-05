@@ -37,7 +37,7 @@ The script will error if protocol versions already exist.
 ## Packaging
 
 With merges to `master`, `release-*` and `dev` branches in the `casper-node` repo, the artifacts are created in
-`genesis.casperlabs.io/drone/<git_hash>/<protocol varsion>/[bin.tar.gz|config.tar.gz]`.
+`genesis.casperlabs.io/drone/<git_hash>/<protocol version>/[bin.tar.gz|config.tar.gz]`.
 
 You may also pull down the artifacts for a given network and modify to stage a new network.  
 If you want to launch a network with the same software version of `casper`, you could pull down the `bin.tar.gz` and 

@@ -9,6 +9,8 @@ import getpass
 from ipaddress import ip_address
 import tarfile
 from collections import Counter
+from shutil import chown
+import os
 
 
 
@@ -32,6 +34,7 @@ class NodeUtil:
     """
     CONFIG_PATH = Path("/etc/casper")
     BIN_PATH = Path("/var/lib/casper/bin")
+    DB_PATH = Path("/var/lib/casper/casper-node")
     NET_CONFIG_PATH = CONFIG_PATH / "network_configs"
     SCRIPT_NAME = "node_util.py"
 
@@ -59,20 +62,21 @@ class NodeUtil:
 
         :param file_name: network config filename
         """
-        SOURCE_URL = "SOURCE_URL"
-        NETWORK_NAME = "NETWORK_NAME"
+        source_url = "SOURCE_URL"
+        network_name = "NETWORK_NAME"
 
         file_path = NodeUtil.NET_CONFIG_PATH / config
-        expected_keys = (SOURCE_URL, NETWORK_NAME)
+        expected_keys = (source_url, network_name)
         config = {}
         for line in file_path.read_text().splitlines():
-            key, value = line.strip().split('=')
-            config[key] = value
+            if line.strip():
+                key, value = line.strip().split('=')
+                config[key] = value
         for key in expected_keys:
             if key not in config.keys():
                 raise ValueError(f"Expected config value not found: {key} in {file_path}")
-        self.url = config[SOURCE_URL]
-        self.network = config[NETWORK_NAME]
+        self.url = config[source_url]
+        self.network = config[network_name]
 
     def _get_protocols(self):
         """ Downloads protocol versions for network """
@@ -84,8 +88,16 @@ class NodeUtil:
         return [data.strip() for data in pv.splitlines()]
 
     @staticmethod
-    def _is_casper_user() -> bool:
-        return getpass.getuser() == "casper"
+    def _verify_casper_user():
+        if getpass.getuser() != "casper":
+            print(f"Run with 'sudo -u casper'")
+            exit(1)
+
+    @staticmethod
+    def _verify_root_user():
+        if getpass.getuser() != "root":
+            print("Run with 'sudo'")
+            exit(1)
 
     @staticmethod
     def _status_text(status):
@@ -133,8 +145,8 @@ class NodeUtil:
             for member in tf.getmembers():
                 tf.extract(member, target_path)
 
-    def _pull_protocol_version(self, protocol_version):
-        self._is_casper_user()
+    def _pull_protocol_version(self, protocol_version, rpm):
+        self._verify_casper_user()
 
         if not NodeUtil.BIN_PATH.exists():
             print(f"Error: expected bin file location {NodeUtil.BIN_PATH} not found.")
@@ -144,11 +156,17 @@ class NodeUtil:
             print(f"Error: expected config file location {NodeUtil.CONFIG_PATH} not found.")
             exit(1)
 
+        if rpm:
+            bin_file = "bin_rpm.tar.gz"
+        else:
+            bin_file = "bin.tar.gz"
+        config_file = "config.tar.gz"
+
         etc_full_path = NodeUtil.CONFIG_PATH / protocol_version
         bin_full_path = NodeUtil.BIN_PATH / protocol_version
         base_url = f"http://{self.url}/{self.network}/{protocol_version}"
-        config_url=f"{base_url}/config.tar.gz"
-        bin_url=f"{base_url}/bin.tar.gz"
+        config_url = f"{base_url}/{config_file}"
+        bin_url = f"{base_url}/{bin_file}"
 
         if etc_full_path.exists():
             print(f"Error: config version path {etc_full_path} already exists. Aborting.")
@@ -157,13 +175,13 @@ class NodeUtil:
             print(f"Error: bin version path {bin_full_path} already exists. Aborting.")
             exit(1)
 
-        config_archive_path = NodeUtil.CONFIG_PATH / "config.tar.gz"
+        config_archive_path = NodeUtil.CONFIG_PATH / config_file
         self._download_file(config_url, config_archive_path)
         self._extract_tar_gz(config_archive_path, etc_full_path)
         print(f"Deleting {config_archive_path}")
         config_archive_path.unlink()
 
-        bin_archive_path = NodeUtil.BIN_PATH / "bin.tar.gz"
+        bin_archive_path = NodeUtil.BIN_PATH / bin_file
         self._download_file(bin_url, bin_archive_path)
         self._extract_tar_gz(bin_archive_path, bin_full_path)
         print(f"Deleting {bin_archive_path}")
@@ -206,7 +224,7 @@ class NodeUtil:
 
     def _config_from_example(self, protocol_version, ip=None):
         """ Create config.toml or config.toml.new (if previous exists) from config-example.toml"""
-        self._is_casper_user()
+        self._verify_casper_user()
 
         config_path = NodeUtil.CONFIG_PATH / protocol_version
         config_toml_path = config_path / "config.toml"
@@ -236,7 +254,7 @@ class NodeUtil:
         outfile.write_text(config_example.read_text().replace("<IP ADDRESS>", ip))
 
     def stage_protocols(self):
-        """Stage available protocols if needed."""
+        """Stage available protocols if needed (use 'sudo -u casper')"""
         parser = argparse.ArgumentParser(description=self.stage_protocols.__doc__,
                                          usage=f"{self.SCRIPT_NAME} stage_protocols [-h] config [--ip IP]")
         parser.add_argument("config", type=str, help=f"name of config file to use from {NodeUtil.NET_CONFIG_PATH}")
@@ -244,11 +262,15 @@ class NodeUtil:
                             type=ip_address,
                             help=f"optional ip to use for config.toml instead of detected ip.",
                             required=False)
+        parser.add_argument("--rpm",
+                            action='store_true',
+                            help="Optional flag to pull RPM compatible binaries.",
+                            required=False)
         args = parser.parse_args(sys.argv[2:])
         self._get_config_values(args.config)
-        if not self._is_casper_user():
-            print(f"Script must be run as casper user for stage_protocols with `sudo -u casper`")
-            exit(1)
+
+        self._verify_casper_user()
+
         exit_code = 0
         for pv in self._get_protocols():
             status = self._check_staged_version(pv)
@@ -261,7 +283,7 @@ class NodeUtil:
                 continue
             if status == Status.UNSTAGED:
                 print(f"Pulling protocol for {pv}.")
-                if not self._pull_protocol_version(pv):
+                if not self._pull_protocol_version(pv, args.rpm):
                     exit_code = 1
             if status in (Status.UNSTAGED, Status.NO_CONFIG):
                 print(f"Creating config for {pv}.")
@@ -300,6 +322,80 @@ class NodeUtil:
             print(f"{last_protocol}: {self._status_text(status)}")
             exit(1)
         exit(0)
+
+    @staticmethod
+    def _is_casper_owned(path) -> bool:
+        return path.owner() == 'casper' and path.group() == 'casper'
+
+    @staticmethod
+    def _walk_path(path, include_dir=True):
+        for p in Path(path).iterdir():
+            if p.is_dir():
+                if include_dir:
+                    yield p.resolve()
+                yield from NodeUtil._walk_path(p)
+                continue
+            yield p.resolve()
+
+    def check_permissions(self):
+        """ Checking files are owned by casper. """
+        # If a user runs commands under root, it can give files non casper ownership and cause problems.
+        exit_code = 0
+        for path in self._walk_path(NodeUtil.CONFIG_PATH):
+            if not self._is_casper_owned(path):
+                print(f"{path} is owned by {path.owner()}:{path.group()}")
+                exit_code = 1
+        for path in self._walk_path(NodeUtil.BIN_PATH):
+            if not self._is_casper_owned(path):
+                print(f"{path} is owned by {path.owner()}:{path.group()}")
+                exit_code = 1
+        exit(exit_code)
+
+    def fix_permissions(self):
+        """ Sets all files owner to casper (use 'sudo') """
+        self._verify_root_user()
+
+        exit_code = 0
+        for path in self._walk_path(NodeUtil.CONFIG_PATH):
+            if not self._is_casper_owned(path):
+                print(f"Correcting ownership of {path}")
+                chown(path, 'casper', 'casper')
+                if not self._is_casper_owned(path):
+                    print(f"Ownership set failed.")
+                    exit_code = 1
+        for path in self._walk_path(NodeUtil.BIN_PATH):
+            if not self._is_casper_owned(path):
+                print(f"Correcting ownership of {path}")
+                chown(path, 'casper', 'casper')
+                if not self._is_casper_owned(path):
+                    print(f"Ownership set failed.")
+                    exit_code = 1
+        exit(exit_code)
+
+    def rotate_logs(self):
+        """ Rotate the logs for casper-node (use 'sudo') """
+        self._verify_root_user()
+        os.system("logrotate -f /etc/logrotate.d/casper-node")
+
+    def delete_local_state(self):
+        """ Delete local db and status files. (use 'sudo') """
+        parser = argparse.ArgumentParser(description=self.delete_local_state.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} delete_local_state [-h] --verify-delete-all")
+        parser.add_argument("--verify_delete_all",
+                            action='store_true',
+                            help="Required for verification that you want to delete everything",
+                            required=False)
+        args = parser.parse_args(sys.argv[2:])
+        self._verify_root_user()
+
+        if not args.verify_delete_all:
+            print(f"Include '--verify_delete_all' flag to confirm. Exiting.")
+            exit(1)
+
+        for path in self.DB_PATH.glob('*'):
+            path.unlink(missing_ok=True)
+        cnl_state = self.CONFIG_PATH / "casper-node-launcher-state.toml"
+        cnl_state.unlink(missing_ok=True)
 
 
 NodeUtil()

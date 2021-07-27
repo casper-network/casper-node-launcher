@@ -35,7 +35,7 @@ assets = [
     ["./target/release/casper-node-launcher", "/usr/bin/casper-node-launcher", "755"],
     ["./resources/BIN_README.md", "/var/lib/casper/bin/README.md", "755"],
     ["./resources/maintainer_scripts/logrotate.d/casper-node", "/etc/logrotate.d/casper-node", "644"],
-    ["../../resources/PLATFORM_DEB", "/etc/casper/PLATFORM", "644"],
+    ["./resources/PLATFORM_DEB", "/etc/casper/PLATFORM", "644"],
     ["./resources/maintainer_scripts/pull_casper_node_version.sh", "/etc/casper/pull_casper_node_version.sh", "755"],
     ["./resources/maintainer_scripts/network_configs/*", "/etc/casper/network_configs/", "644"],
     ["./resources/maintainer_scripts/delete_local_db.sh", "/etc/casper/delete_local_db.sh", "755"],

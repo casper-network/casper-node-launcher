@@ -154,7 +154,7 @@ steps:
   - name: build-rpm
     image: casperlabs/rpm-package
     commands:
-      - cargo rpm build -v;
+      - cargo rpm build -v
 
 
   - name: publish-github-release

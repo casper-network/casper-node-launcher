@@ -65,7 +65,6 @@ unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"
 restart-after-upgrade = false
 
 [package.metadata.rpm.targets]
-# This is expecting local path to be ./target/release maybe?
 casper-node-launcher = { path = "/usr/bin/casper-node-launcher" }
 "../../resources/BIN_README.md" = {path = "/var/lib/casper/bin/README.md"}
 "../../resources/PLATFORM_RPM" = {path = "/etc/casper/PLATFORM"}

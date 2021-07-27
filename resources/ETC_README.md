@@ -53,13 +53,16 @@ To stop:
 If you need to delete the db for a new run,
 you can use the script in `/etc/casper` with `sudo /etc/casper/delete_local_db.sh`.
 
-## Upgrading casper-node
+## Staging casper-node protocols
 
 Upgrading is done by staging a new casper-node and configuration prior to the agreed upgrade era.
 
-To simplify this, the `sudo -u casper /etc/casper/pull_casper_node_version.sh [semver] [network]` script is included.  This will
+To simplify this, the `sudo -u casper /etc/casper/pull_casper_node_version.sh [network config] [semver]` script is included.  This will
 pull files from the appropriate version.  If desired, the casper-node can be built from source at the 
 same version.
+
+To get a working default config.toml for a protocol version: `sudo -u casper /etc/casper/config_from_example.sh [semver]`.
+
 
 When the upgrade era occurs, the currently running casper-node will exit and casper-node-launcher will
 start the new upgraded version of casper-node.

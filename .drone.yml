@@ -39,6 +39,11 @@ steps:
       - name: docker_sock
         path: /var/run/docker.sock
 
+  - name: build-rpm
+    image: casperlabs/rpm-package
+    commands:
+      - cargo rpm build -v
+
 volumes:
   - name: docker_sock
     host:
@@ -99,16 +104,6 @@ steps:
     commands:
       - cargo deb
 
-  - name: publish-bintray
-    image: casperlabs/casper-node-launcher-build
-    commands:
-      - "./upload_to_bintray.sh --repo-name debian --package-name casper-node-launcher --package-tag true"
-    environment:
-      CL_VAULT_TOKEN:
-        from_secret: vault_token
-      CL_VAULT_HOST:
-        from_secret: vault_host
-
   - name: publish-repo-prod
     image: casperlabs/aptly:latest
     failure: ignore
@@ -155,6 +150,31 @@ steps:
         from_secret: docker_username
       DOCKER_PASSWORD:
         from_secret: docker_password
+
+  - name: build-rpm
+    image: casperlabs/rpm-package
+    commands:
+      - cargo rpm build -v;
+
+
+  - name: publish-github-release
+    image: plugins/github-release
+    settings:
+      api_key:
+        from_secret: github_token
+      checksum:
+        - sha256
+        - md5
+      files:
+        - "./target/debian/*.deb"
+        - "./target/release/rpmbuild/RPMS/x86_64/*.rpm"
+      prerelease:
+        - true
+    when:
+      ref:
+        - refs/tags/v*
+
+  # Need to attach rpm to github artifacts.
 
 volumes:
   - name: docker_sock

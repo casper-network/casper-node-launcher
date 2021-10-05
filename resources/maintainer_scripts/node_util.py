@@ -392,10 +392,17 @@ class NodeUtil:
             print(f"Include '--verify_delete_all' flag to confirm. Exiting.")
             exit(1)
 
+        # missing_ok=True arg to unlink only 3.8+, using try/catch.
         for path in self.DB_PATH.glob('*'):
-            path.unlink(missing_ok=True)
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
         cnl_state = self.CONFIG_PATH / "casper-node-launcher-state.toml"
-        cnl_state.unlink(missing_ok=True)
+        try:
+            cnl_state.unlink()
+        except FileNotFoundError:
+            pass
 
 
 NodeUtil()

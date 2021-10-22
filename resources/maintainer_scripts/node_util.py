@@ -11,7 +11,7 @@ import tarfile
 from collections import Counter
 from shutil import chown
 import os
-
+import json
 
 
 # protocol 1_0_0 should have accounts.toml
@@ -25,24 +25,34 @@ class Status(enum.Enum):
     BIN_ONLY = 3
     CONFIG_ONLY = 4
     STAGED = 5
+    WRONG_NETWORK = 6
 
 
 class NodeUtil:
     """
     Using non `_` and non uppercase methods to expose for external commands.
-    Description if command comes from the doc string of method.
+    Description of command comes from the doc string of method.
     """
     CONFIG_PATH = Path("/etc/casper")
     BIN_PATH = Path("/var/lib/casper/bin")
     DB_PATH = Path("/var/lib/casper/casper-node")
     NET_CONFIG_PATH = CONFIG_PATH / "network_configs"
+    PLATFORM_PATH = CONFIG_PATH / "PLATFORM"
     SCRIPT_NAME = "node_util.py"
 
     def __init__(self):
+        self._network_name = None
+        self._url = None
+        self._bin_mode = None
+
         usage_docs = [f"{self.SCRIPT_NAME} <command> [args]", "Available commands:"]
         commands = []
         for function in [f for f in dir(self) if not f.startswith('_') and f[0].islower()]:
-            usage_docs.append(f"  {function} - {getattr(self, function).__doc__.strip()}")
+            try:
+                usage_docs.append(f"  {function} - {getattr(self, function).__doc__.strip()}")
+            except AttributeError:
+                raise Exception(f"Error creating usage docs, expecting {function} to be root function and have doc comment."
+                                f" Lead with underscore if not.")
             commands.append(function)
         usage_docs.append(" ")
 
@@ -56,7 +66,14 @@ class NodeUtil:
         args = parser.parse_args(sys.argv[1:2])
         getattr(self, args.command)()
 
-    def _get_config_values(self, config):
+    @staticmethod
+    def _get_platform():
+        if NodeUtil.PLATFORM_PATH.exists():
+            return NodeUtil.PLATFORM_PATH.read_text().strip()
+        else:
+            return "deb"
+
+    def _load_config_values(self, config):
         """
         Parses config file to get values
 
@@ -64,9 +81,10 @@ class NodeUtil:
         """
         source_url = "SOURCE_URL"
         network_name = "NETWORK_NAME"
+        bin_mode = "BIN_MODE"
 
         file_path = NodeUtil.NET_CONFIG_PATH / config
-        expected_keys = (source_url, network_name)
+        expected_keys = (source_url, network_name, bin_mode)
         config = {}
         for line in file_path.read_text().splitlines():
             if line.strip():
@@ -75,12 +93,13 @@ class NodeUtil:
         for key in expected_keys:
             if key not in config.keys():
                 raise ValueError(f"Expected config value not found: {key} in {file_path}")
-        self.url = config[source_url]
-        self.network = config[network_name]
+        self._url = config[source_url]
+        self._network_name = config[network_name]
+        self._bin_mode = config[bin_mode]
 
     def _get_protocols(self):
         """ Downloads protocol versions for network """
-        full_url = f"{self.url}/{self.network}/protocol_versions"
+        full_url = f"{self._network_url}/protocol_versions"
         r = self._http.request('GET', full_url)
         if r.status != 200:
             raise IOError(f"Expected status 200 requesting {full_url}, received {r.status}")
@@ -105,18 +124,22 @@ class NodeUtil:
                           Status.NO_CONFIG: "No config.toml for Protocol",
                           Status.BIN_ONLY: "Only bin is staged for Protocol, no config",
                           Status.CONFIG_ONLY: "Only config is staged for Protocol, no bin",
+                          Status.WRONG_NETWORK: "chainspec.toml is for wrong network",
                           Status.STAGED: "Protocol Staged"}
         return status_display[status]
 
-    @staticmethod
-    def _check_staged_version(version):
+    def _check_staged_version(self, version):
         """
         Checks completeness of staged protocol version
 
         :param version: protocol version in underscore format such as 1_0_0
         :return: Status enum
         """
+        if not self._network_name:
+            print("Config not parsed prior to call of _check_staged_version and self._network_name is not populated.")
+            exit(1)
         config_version_path = NodeUtil.CONFIG_PATH / version
+        chainspec_toml_file_path = config_version_path / "chainspec.toml"
         config_toml_file_path = config_version_path / "config.toml"
         bin_version_path = NodeUtil.BIN_PATH / version / "casper-node"
         if not config_version_path.exists():
@@ -128,6 +151,8 @@ class NodeUtil:
                 return Status.CONFIG_ONLY
             if not config_toml_file_path.exists():
                 return Status.NO_CONFIG
+            if NodeUtil._chainspec_name(chainspec_toml_file_path) != self._network_name:
+                return Status.WRONG_NETWORK
         return Status.STAGED
 
     def _download_file(self, url, target_path):
@@ -145,7 +170,11 @@ class NodeUtil:
             for member in tf.getmembers():
                 tf.extract(member, target_path)
 
-    def _pull_protocol_version(self, protocol_version, rpm):
+    @property
+    def _network_url(self):
+        return f"http://{self._url}/{self._network_name}"
+
+    def _pull_protocol_version(self, protocol_version, platform="deb"):
         self._verify_casper_user()
 
         if not NodeUtil.BIN_PATH.exists():
@@ -156,15 +185,27 @@ class NodeUtil:
             print(f"Error: expected config file location {NodeUtil.CONFIG_PATH} not found.")
             exit(1)
 
-        if rpm:
-            bin_file = "bin_rpm.tar.gz"
-        else:
-            bin_file = "bin.tar.gz"
+        # Expectation is one config.tar.gz but multiple bin*.tar.gz
+        # bin.tar.gz is mainnet bin and debian
+        # bin_new.tar.gz is post 1.4.0 launch and debian
+        # bin_rpm.tar.gz is mainnet bin and RHEL (_arch will be used for others in the future)
+        # bin_rpm_new.tar.gz is post 1.4.0 launch and RHEL
+
+        bin_file = "bin"
+        if platform != "deb":
+            # Handle alternative builds
+            bin_file += f"_{platform}"
+        if self._bin_mode != "mainnet":
+            # Handle non mainnet for post 1.4.0 launched networks
+            bin_file += "_new"
+        bin_file += ".tar.gz"
         config_file = "config.tar.gz"
+        print(bin_file)
+        exit(1)
 
         etc_full_path = NodeUtil.CONFIG_PATH / protocol_version
         bin_full_path = NodeUtil.BIN_PATH / protocol_version
-        base_url = f"http://{self.url}/{self.network}/{protocol_version}"
+        base_url = f"{self._network_url}/{protocol_version}"
         config_url = f"{base_url}/{config_file}"
         bin_url = f"{base_url}/{bin_file}"
 
@@ -262,15 +303,11 @@ class NodeUtil:
                             type=ip_address,
                             help=f"optional ip to use for config.toml instead of detected ip.",
                             required=False)
-        parser.add_argument("--rpm",
-                            action='store_true',
-                            help="Optional flag to pull RPM compatible binaries.",
-                            required=False)
         args = parser.parse_args(sys.argv[2:])
-        self._get_config_values(args.config)
+        self._load_config_values(args.config)
 
         self._verify_casper_user()
-
+        platform = self._get_platform()
         exit_code = 0
         for pv in self._get_protocols():
             status = self._check_staged_version(pv)
@@ -283,7 +320,7 @@ class NodeUtil:
                 continue
             if status == Status.UNSTAGED:
                 print(f"Pulling protocol for {pv}.")
-                if not self._pull_protocol_version(pv, args.rpm):
+                if not self._pull_protocol_version(pv, platform):
                     exit_code = 1
             if status in (Status.UNSTAGED, Status.NO_CONFIG):
                 print(f"Creating config for {pv}.")
@@ -298,8 +335,7 @@ class NodeUtil:
                                          usage=f"{self.SCRIPT_NAME} check_protocols [-h] config ")
         parser.add_argument("config", type=str, help=f"name of config file to use from {NodeUtil.NET_CONFIG_PATH}")
         args = parser.parse_args(sys.argv[2:])
-        self._get_config_values(args.config)
-        self._get_protocols()
+        self._load_config_values(args.config)
 
         exit_code = 0
         for pv in self._get_protocols():
@@ -310,12 +346,12 @@ class NodeUtil:
         exit(exit_code)
 
     def check_for_upgrade(self):
-        """ Checks if protocol are fully installed """
+        """ Checks if last protocol is staged """
         parser = argparse.ArgumentParser(description=self.check_for_upgrade.__doc__,
                                          usage=f"{self.SCRIPT_NAME} check_for_upgrade [-h] config ")
         parser.add_argument("config", type=str, help=f"name of config file to use from {NodeUtil.NET_CONFIG_PATH}")
         args = parser.parse_args(sys.argv[2:])
-        self._get_config_values(args.config)
+        self._load_config_values(args.config)
         last_protocol = self._get_protocols()[-1]
         status = self._check_staged_version(last_protocol)
         if status == Status.UNSTAGED:
@@ -326,6 +362,12 @@ class NodeUtil:
     @staticmethod
     def _is_casper_owned(path) -> bool:
         return path.owner() == 'casper' and path.group() == 'casper'
+
+    @staticmethod
+    def _walk_file_locations():
+        for path in NodeUtil.BIN_PATH, NodeUtil.CONFIG_PATH, NodeUtil.DB_PATH:
+            for _path in NodeUtil._walk_path(path):
+                yield _path
 
     @staticmethod
     def _walk_path(path, include_dir=True):
@@ -341,14 +383,12 @@ class NodeUtil:
         """ Checking files are owned by casper. """
         # If a user runs commands under root, it can give files non casper ownership and cause problems.
         exit_code = 0
-        for path in self._walk_path(NodeUtil.CONFIG_PATH):
+        for path in self._walk_file_locations():
             if not self._is_casper_owned(path):
                 print(f"{path} is owned by {path.owner()}:{path.group()}")
                 exit_code = 1
-        for path in self._walk_path(NodeUtil.BIN_PATH):
-            if not self._is_casper_owned(path):
-                print(f"{path} is owned by {path.owner()}:{path.group()}")
-                exit_code = 1
+        if exit_code == 0:
+            print("Permissions are correct.")
         exit(exit_code)
 
     def fix_permissions(self):
@@ -356,14 +396,7 @@ class NodeUtil:
         self._verify_root_user()
 
         exit_code = 0
-        for path in self._walk_path(NodeUtil.CONFIG_PATH):
-            if not self._is_casper_owned(path):
-                print(f"Correcting ownership of {path}")
-                chown(path, 'casper', 'casper')
-                if not self._is_casper_owned(path):
-                    print(f"Ownership set failed.")
-                    exit_code = 1
-        for path in self._walk_path(NodeUtil.BIN_PATH):
+        for path in self._walk_file_locations():
             if not self._is_casper_owned(path):
                 print(f"Correcting ownership of {path}")
                 chown(path, 'casper', 'casper')
@@ -403,6 +436,31 @@ class NodeUtil:
             cnl_state.unlink()
         except FileNotFoundError:
             pass
+
+    @staticmethod
+    def _ip_address_type(ip_address: str):
+        try:
+            ip = ipaddress.ip_address(ip_address)
+        except ValueError:
+            print(f"Error: Invalid IP: {ip_address}")
+        else:
+            return str(ip)
+
+    def _get_status(self, ip, port):
+        """ Get status data from node """
+        full_url = f"{ip}:{port}/status"
+        r = self._http.request('GET', full_url)
+        if r.status != 200:
+            raise IOError(f"Expected status 200 requesting {full_url}, received {r.status}")
+        return json.loads(r.data.decode('utf-8'))
+
+    @staticmethod
+    def _chainspec_name(chainspec_path) -> str:
+        # Hack to not require toml package install
+        for line in chainspec_path.read_text().splitlines():
+            NAME_DATA = "name = '"
+            if line[:len(NAME_DATA)] == NAME_DATA:
+                return line.split(NAME_DATA)[1].split("'")[0]
 
 
 NodeUtil()

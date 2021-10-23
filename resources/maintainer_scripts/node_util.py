@@ -84,7 +84,7 @@ class NodeUtil:
         bin_mode = "BIN_MODE"
 
         file_path = NodeUtil.NET_CONFIG_PATH / config
-        expected_keys = (source_url, network_name, bin_mode)
+        expected_keys = (source_url, network_name)
         config = {}
         for line in file_path.read_text().splitlines():
             if line.strip():
@@ -95,7 +95,7 @@ class NodeUtil:
                 raise ValueError(f"Expected config value not found: {key} in {file_path}")
         self._url = config[source_url]
         self._network_name = config[network_name]
-        self._bin_mode = config[bin_mode]
+        self._bin_mode = config.get(bin_mode, "mainnet")
 
     def _get_protocols(self):
         """ Downloads protocol versions for network """

@@ -92,7 +92,8 @@ class NodeUtil:
                 config[key] = value
         for key in expected_keys:
             if key not in config.keys():
-                raise ValueError(f"Expected config value not found: {key} in {file_path}")
+                print(f"Expected config value not found: {key} in {file_path}")
+                exit(1)
         self._url = config[source_url]
         self._network_name = config[network_name]
         self._bin_mode = config.get(bin_mode, "mainnet")
@@ -200,8 +201,7 @@ class NodeUtil:
             bin_file += "_new"
         bin_file += ".tar.gz"
         config_file = "config.tar.gz"
-        print(bin_file)
-        exit(1)
+        print(f"Using bin mode file of {bin_file}")
 
         etc_full_path = NodeUtil.CONFIG_PATH / protocol_version
         bin_full_path = NodeUtil.BIN_PATH / protocol_version

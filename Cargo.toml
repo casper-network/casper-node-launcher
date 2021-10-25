@@ -1,6 +1,6 @@
 [package]
 name = "casper-node-launcher"
-version = "0.3.4"
+version = "0.3.5"
 authors = ["Fraser Hutchison <fraser@casperlabs.io>", "Joe Sacher <joe@casperlabs.io>"]
 edition = "2018"
 description = "A binary which runs and upgrades the casper-node of the Casper network"
@@ -40,6 +40,7 @@ assets = [
     ["./resources/maintainer_scripts/network_configs/*", "/etc/casper/network_configs/", "644"],
     ["./resources/maintainer_scripts/delete_local_db.sh", "/etc/casper/delete_local_db.sh", "755"],
     ["./resources/maintainer_scripts/config_from_example.sh", "/etc/casper/config_from_example.sh", "755"],
+    ["./resources/maintainer_scripts/node_util.py", "/etc/casper/node_util.py", "755"],
     ["./resources/ETC_README.md", "/etc/casper/README.md", "644"],
     ["./resources/VALIDATOR_KEYS_README.md", "/etc/casper/validator_keys/README.md", "644"]
 ]
@@ -74,6 +75,7 @@ casper-node-launcher = { path = "/usr/bin/casper-node-launcher" }
 "../../resources/maintainer_scripts/network_configs/casper-test.conf" = {path = "/etc/casper/network_configs/casper-test.conf"}
 "../../resources/maintainer_scripts/delete_local_db.sh" = {path = "/etc/casper/delete_local_db.sh"}
 "../../resources/maintainer_scripts/config_from_example.sh" = {path = "/etc/casper/config_from_example.sh"}
+"../../resources/maintainer_scripts/node_util.py" = {path = "/etc/casper/node_util.py"}
 "../../resources/ETC_README.md" = {path = "/etc/casper/README.md"}
 "../../resources/VALIDATOR_KEYS_README.md" = {path = "/etc/casper/validator_keys/README.md"}
 "../../resources/maintainer_scripts/casper_node_launcher/casper-node-launcher.service" = {path = "/etc/systemd/system/casper-node-launcher.service"}

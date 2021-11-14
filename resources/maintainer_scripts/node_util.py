@@ -2,7 +2,7 @@
 import ipaddress
 import sys
 from pathlib import Path
-import urllib3
+from urllib import request
 import argparse
 import enum
 import getpass
@@ -12,6 +12,7 @@ from collections import Counter
 from shutil import chown
 import os
 import json
+import time
 
 
 # protocol 1_0_0 should have accounts.toml
@@ -56,7 +57,6 @@ class NodeUtil:
             commands.append(function)
         usage_docs.append(" ")
 
-        self._http = urllib3.PoolManager()
         self._external_ip = None
 
         parser = argparse.ArgumentParser(
@@ -101,10 +101,10 @@ class NodeUtil:
     def _get_protocols(self):
         """ Downloads protocol versions for network """
         full_url = f"{self._network_url}/protocol_versions"
-        r = self._http.request('GET', full_url)
+        r = request.urlopen(full_url)
         if r.status != 200:
             raise IOError(f"Expected status 200 requesting {full_url}, received {r.status}")
-        pv = r.data.decode('utf-8')
+        pv = r.read().decode('utf-8')
         return [data.strip() for data in pv.splitlines()]
 
     @staticmethod
@@ -158,11 +158,11 @@ class NodeUtil:
 
     def _download_file(self, url, target_path):
         print(f"Downloading {url} to {target_path}")
-        r = self._http.request('GET', url)
+        r = request.urlopen(url)
         if r.status != 200:
             raise IOError(f"Expected status 200 requesting {url}, received {r.status}")
         with open(target_path, 'wb') as f:
-            f.write(r.data)
+            f.write(r.read())
 
     @staticmethod
     def _extract_tar_gz(source_file_path, target_path):
@@ -236,14 +236,13 @@ class NodeUtil:
                     ("https://ident.me", "ident.me"))
         ips = []
         # Using our own PoolManager for shorter timeouts
-        http = urllib3.PoolManager(timeout=10)
         print("Querying your external IP...")
         for url, service in services:
-            r = http.request('GET', url, )
+            r = request.urlopen(url)
             if r.status != 200:
                 ip = ""
             else:
-                ip = r.data.decode('utf-8').strip()
+                ip = r.read().decode('utf-8').strip()
             print(f" {service} says '{ip}' with Status: {r.status}")
             if ip:
                 ips.append(ip)
@@ -410,6 +409,30 @@ class NodeUtil:
         self._verify_root_user()
         os.system("logrotate -f /etc/logrotate.d/casper-node")
 
+    def restart(self):
+        """ Restart casper-node-launcher """
+        # Using stop, pause, start to get full reload not done with systemctl restart
+        self.stop()
+        time.sleep(1)
+        self.start()
+
+    def stop(self):
+        """ Stop casper-node-launcher """
+        self._verify_root_user()
+        os.system("systemctl stop casper-node-launcher")
+
+    def start(self):
+        """ Start casper-node-launcher """
+        self._verify_root_user()
+        os.system("systemctl start casper-node-launcher")
+
+    @staticmethod
+    def status():
+        """ Status of casper-node-launcher """
+        # using op.popen to stop hanging return to terminate
+        result = os.popen("systemctl status casper-node-launcher")
+        print(result.read())
+
     def delete_local_state(self):
         """ Delete local db and status files. (use 'sudo') """
         parser = argparse.ArgumentParser(description=self.delete_local_state.__doc__,
@@ -437,6 +460,28 @@ class NodeUtil:
         except FileNotFoundError:
             pass
 
+    def force_run_version(self):
+        """ Force casper-node-launcher to start at a certain protocol version """
+        parser = argparse.ArgumentParser(description=self.force_run_version.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} force_run_version [-h] protocol_version")
+        parser.add_argument("protocol_version", help="Protocol version for casper-node-launcher to run.")
+        args = parser.parse_args(sys.argv[2:])
+        version = args.protocol_version
+        config_path = self.CONFIG_PATH / version
+        bin_path = self.BIN_PATH / version
+        if not config_path.exists():
+            raise ValueError(f"/etc/casper/{version} not found.  Aborting.")
+        if not bin_path.exists():
+            raise ValueError(f"/var/lib/casper/bin/{version} not found.  Aborting.")
+        self._verify_casper_user()
+        state_path = self.CONFIG_PATH / "casper-node-launcher-state.toml"
+        lines = ["mode = 'RunNodeAsValidator'",
+                 f"version = '{version.replace('_','.')}'",
+                 f"binary_path = '/var/lib/casper/bin/{version}/casper-node'",
+                 f"config_path = '/etc/casper/{version}/config.toml'"]
+        state_path.write_text("\n".join(lines))
+        self.restart()
+
     @staticmethod
     def _ip_address_type(ip_address: str):
         try:
@@ -463,4 +508,6 @@ class NodeUtil:
                 return line.split(NAME_DATA)[1].split("'")[0]
 
 
-NodeUtil()
+if __name__ == '__main__':
+
+    NodeUtil()

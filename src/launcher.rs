@@ -126,7 +126,7 @@ impl Launcher {
 
         debug!(path=%state_path.display(), "stored state doesn't exist");
 
-        let version = launcher.next_installed_version(&Version::new(0, 0, 0))?;
+        let version = launcher.most_recent_version()?;
         let node_info = launcher.new_node_info(version);
         launcher.state = State::RunNodeAsValidator(node_info);
         launcher.write()?;
@@ -159,6 +159,24 @@ impl Launcher {
         )?;
         info!(path=%path.display(), state=?self.state, "stored state");
         Ok(())
+    }
+
+    /// Gets the most recent installed binary version.
+    ///
+    /// Returns an error when no correct versions can be detected.
+    fn most_recent_version(&self) -> Result<Version> {
+        let all_versions = utils::versions_from_path(&Self::binary_root_dir())?;
+
+        // We are guaranteed to have at least one version in the `all_versions` container,
+        // because if there are no valid version installed the `utils::versions_from_path()` will bail.
+        if all_versions.is_empty() {}
+
+        if let Some(most_recent_version) = all_versions.into_iter().last() {
+            Ok(most_recent_version)
+        } else {
+            // `utils::versions_from_path()` will log a message for us
+            unreachable!();
+        }
     }
 
     /// Gets the next installed version of the node binary and config.
@@ -523,11 +541,33 @@ mod tests {
     }
 
     #[test]
+    fn should_run_most_recent_version_when_state_file_absent() {
+        let _ = logging::init();
+
+        // Set up the test folders as if casper-node has just been staged at v3.0.0,
+        // but create the state file, so that the launcher launches the v1.0.0.
+        install_mock(&*V1, true);
+        install_mock(&*V2, true);
+        install_mock(&*V3, true);
+
+        let mut launcher = Launcher::new().unwrap();
+
+        // Run the launcher's first and only step - should run node v3.0.0 in validator mode.  As there
+        // will be no further upgraded binary available after the node exits, the step should return
+        // an error.
+        let error = launcher.step().unwrap_err().to_string();
+        assert_last_log_line_eq(&launcher, "Node v3.0.0 ran as validator");
+        assert_eq!("no higher version than current 3.0.0 installed", error);
+    }
+
+    #[test]
     fn should_run_upgrades() {
         let _ = logging::init();
 
-        // Set up the test folders as if casper-node has just been installed at v3.0.0.
+        // Set up the test folders as if casper-node has just been staged at v3.0.0,
+        // but create the state file, so that the launcher launches the v1.0.0.
         install_mock(&*V1, true);
+        Launcher::new().unwrap();
         install_mock(&*V2, true);
         install_mock(&*V3, true);
 
@@ -740,5 +780,13 @@ mod tests {
             "next binary version 1.0.0 != next config version 2.0.0",
             error
         );
+    }
+
+    #[test]
+    fn should_error_if_no_versions_are_installed() {
+        let _ = logging::init();
+
+        let error = Launcher::new().unwrap_err().to_string();
+        assert!(error.contains("failed to get a valid version from subdirs"));
     }
 }

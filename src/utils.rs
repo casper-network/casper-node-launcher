@@ -1,4 +1,6 @@
-use std::{fs, path::Path, process::Command, str::FromStr, sync::atomic::Ordering};
+use std::{
+    collections::BTreeSet, fs, path::Path, process::Command, str::FromStr, sync::atomic::Ordering,
+};
 
 use anyhow::{bail, Error, Result};
 use semver::Version;
@@ -56,8 +58,8 @@ pub fn previous_installed_version(dir: &Path, current_version: &Version) -> Resu
     Ok(previous_version)
 }
 
-fn versions_from_path(dir: &Path) -> Result<Vec<Version>> {
-    let mut versions = vec![];
+pub fn versions_from_path(dir: &Path) -> Result<BTreeSet<Version>> {
+    let mut versions = BTreeSet::new();
 
     for entry in map_and_log_error(
         fs::read_dir(dir),
@@ -71,7 +73,6 @@ fn versions_from_path(dir: &Path) -> Result<Vec<Version>> {
                 continue;
             }
         };
-
         let version = match Version::from_str(&subdir_name) {
             Ok(version) => version,
             Err(error) => {
@@ -80,7 +81,7 @@ fn versions_from_path(dir: &Path) -> Result<Vec<Version>> {
             }
         };
 
-        versions.push(version);
+        versions.insert(version);
     }
 
     if versions.is_empty() {
@@ -257,4 +258,33 @@ mod tests {
         command.arg(&script_path);
         assert_eq!(run_node(command).unwrap(), NodeExitCode::ShouldDowngrade);
     }
+}
+
+#[test]
+fn should_read_versions_from_dir() {
+    let tempdir = tempfile::tempdir().expect("should create temp dir");
+    fs::create_dir(tempdir.path().join("1_0_0")).unwrap();
+    fs::create_dir(tempdir.path().join("2_0_0")).unwrap();
+    fs::create_dir(tempdir.path().join("3_0_0")).unwrap();
+    fs::create_dir(tempdir.path().join("3_0_0_0")).unwrap();
+    fs::create_dir(tempdir.path().join("3_A")).unwrap();
+    fs::create_dir(tempdir.path().join("2_0_1")).unwrap();
+    fs::create_dir(tempdir.path().join("1_0_9145")).unwrap();
+    fs::create_dir(tempdir.path().join("1_454875135649876544411657897987_9145")).unwrap();
+
+    // Should return in ascending order
+    let expected_version: BTreeSet<Version> = [
+        Version::new(1, 0, 0),
+        Version::new(1, 0, 9145),
+        Version::new(2, 0, 0),
+        Version::new(2, 0, 1),
+        Version::new(3, 0, 0),
+    ]
+    .iter()
+    .cloned()
+    .collect();
+
+    let actual_versions = versions_from_path(tempdir.path()).unwrap();
+
+    assert_eq!(expected_version, actual_versions);
 }

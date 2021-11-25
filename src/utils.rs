@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 /// Represents the exit code of the node process.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 #[repr(i32)]
-pub enum NodeExitCode {
+pub(crate) enum NodeExitCode {
     /// Indicates a successful execution.
     Success = 0,
     /// Indicates the node version should be downgraded.
@@ -21,7 +21,10 @@ pub enum NodeExitCode {
 /// after `current_version`.
 ///
 /// Subdir names should be semvers with dots replaced with underscores.
-pub fn next_installed_version(dir: &Path, current_version: &Version) -> Result<Version> {
+pub(crate) fn next_installed_version<P: AsRef<Path>>(
+    dir: P,
+    current_version: &Version,
+) -> Result<Version> {
     let max_version = Version::new(u64::max_value(), u64::max_value(), u64::max_value());
 
     let mut next_version = max_version.clone();
@@ -42,7 +45,10 @@ pub fn next_installed_version(dir: &Path, current_version: &Version) -> Result<V
 /// before `current_version`.
 ///
 /// Subdir names should be semvers with dots replaced with underscores.
-pub fn previous_installed_version(dir: &Path, current_version: &Version) -> Result<Version> {
+pub(crate) fn previous_installed_version<P: AsRef<Path>>(
+    dir: P,
+    current_version: &Version,
+) -> Result<Version> {
     let min_version = Version::new(0, 0, 0);
 
     let mut previous_version = min_version.clone();
@@ -59,14 +65,18 @@ pub fn previous_installed_version(dir: &Path, current_version: &Version) -> Resu
     Ok(previous_version)
 }
 
-pub fn versions_from_path(dir: &Path) -> Result<BTreeSet<Version>> {
+pub(crate) fn versions_from_path<P: AsRef<Path>>(dir: P) -> Result<BTreeSet<Version>> {
     let mut versions = BTreeSet::new();
 
     for entry in map_and_log_error(
-        fs::read_dir(dir),
-        format!("failed to read dir {}", dir.display()),
+        fs::read_dir(dir.as_ref()),
+        format!("failed to read dir {}", dir.as_ref().display()),
     )? {
-        let path = map_and_log_error(entry, format!("bad dir entry in {}", dir.display()))?.path();
+        let path = map_and_log_error(
+            entry,
+            format!("bad dir entry in {}", dir.as_ref().display()),
+        )?
+        .path();
         let subdir_name = match path.file_name() {
             Some(name) => name.to_string_lossy().replace("_", "."),
             None => {
@@ -88,7 +98,7 @@ pub fn versions_from_path(dir: &Path) -> Result<BTreeSet<Version>> {
     if versions.is_empty() {
         let msg = format!(
             "failed to get a valid version from subdirs in {}",
-            dir.display()
+            dir.as_ref().display()
         );
         warn!("{}", msg);
         bail!(msg);
@@ -98,7 +108,7 @@ pub fn versions_from_path(dir: &Path) -> Result<BTreeSet<Version>> {
 }
 
 /// Runs the given command as a child process.
-pub fn run_node(mut command: Command) -> Result<NodeExitCode> {
+pub(crate) fn run_node(mut command: Command) -> Result<NodeExitCode> {
     let mut child = map_and_log_error(command.spawn(), format!("failed to execute {:?}", command))?;
     crate::CHILD_PID.store(child.id(), Ordering::SeqCst);
 
@@ -123,7 +133,7 @@ pub fn run_node(mut command: Command) -> Result<NodeExitCode> {
 }
 
 /// Maps an error to a different type of error, while also logging the error at warn level.
-pub fn map_and_log_error<T, E: std::error::Error + Send + Sync + 'static>(
+pub(crate) fn map_and_log_error<T, E: std::error::Error + Send + Sync + 'static>(
     result: std::result::Result<T, E>,
     error_msg: String,
 ) -> Result<T> {
@@ -145,7 +155,7 @@ where
 {
     // This function should ideally be replaced with `itertools::join()`.
     // However, currently, it is only used to produce a proper debug message,
-    // which is not sufficient justification to add dependency to `itertools`.
+    // which is not sufficient justification to add a dependency to `itertools`.
     let result = iterable.into_iter().fold(String::new(), |result, item| {
         format!("{}{}, ", result, item)
     });

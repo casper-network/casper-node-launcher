@@ -5,6 +5,7 @@ mod utils;
 
 use std::{
     panic::{self, PanicInfo},
+    str::FromStr,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc,
@@ -14,12 +15,13 @@ use std::{
 
 use anyhow::Result;
 use backtrace::Backtrace;
-use clap::{crate_description, crate_version, App};
+use clap::{crate_description, crate_version, App, Arg};
 use nix::{
     sys::signal::{self, Signal},
     unistd::Pid,
 };
 use once_cell::sync::Lazy;
+use semver::Version;
 use signal_hook::{consts::TERM_SIGNALS, iterator::Signals};
 use tracing::warn;
 
@@ -73,9 +75,24 @@ fn main() -> Result<()> {
 
     let app = App::new(APP_NAME)
         .version(crate_version!())
+        .arg(
+            Arg::new("force-version")
+                .short('f')
+                .long("force-version")
+                .value_name("version")
+                .about("Forces the launcher to run the specified version of the node, for example \"1.2.3\"")
+                .validator(|arg: &str| Version::from_str(arg).map_err(|_| format!("unable to parse '{}' as version", arg)))
+                .required(false)
+                .takes_value(true),
+        )
         .about(crate_description!());
-    let _ = app.get_matches();
+    let matches = app.get_matches();
 
-    let mut launcher = Launcher::new()?;
+    // Safe to unwrap() as we have the string validated by `clap` already.
+    let forced_version = matches
+        .value_of("force-version")
+        .map(|ver| Version::from_str(ver).unwrap());
+
+    let mut launcher = Launcher::new(forced_version)?;
     launcher.run()
 }

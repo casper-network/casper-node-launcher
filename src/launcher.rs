@@ -102,6 +102,17 @@ impl Launcher {
     /// it will search for the latest installed version of casper-node and start running it in
     /// validator mode.
     pub fn new() -> Result<Self> {
+        let installed_binary_versions = utils::versions_from_path(&Self::binary_root_dir())?;
+        let installed_config_versions = utils::versions_from_path(&Self::config_root_dir())?;
+
+        if installed_binary_versions != installed_config_versions {
+            bail!(
+                "installed binary versions ({}) don't match installed configs ({})",
+                utils::iter_to_string(installed_binary_versions),
+                utils::iter_to_string(installed_config_versions),
+            );
+        }
+
         let mut launcher = Launcher {
             binary_root_dir: Self::binary_root_dir(),
             config_root_dir: Self::config_root_dir(),
@@ -768,20 +779,21 @@ mod tests {
         let _ = logging::init();
 
         install_mock(&*V1, true);
-        // Rename the config folder to 2_0_0.
+        install_mock(&*V2, true);
+        install_mock(&*V3, true);
+        // Rename config folders to emulate the difference.
         fs::rename(
             Launcher::config_root_dir().join("1_0_0"),
-            Launcher::config_root_dir().join("2_0_0"),
+            Launcher::config_root_dir().join("2_0_1"),
         )
         .unwrap();
 
         let error = Launcher::new().unwrap_err().to_string();
         assert_eq!(
-            "next binary version 1.0.0 != next config version 2.0.0",
+            "installed binary versions (1.0.0, 2.0.0, 3.0.0) don't match installed configs (2.0.0, 2.0.1, 3.0.0)",
             error
         );
     }
-
     #[test]
     fn should_error_if_no_versions_are_installed() {
         let _ = logging::init();

@@ -1,5 +1,6 @@
 use std::{
-    collections::BTreeSet, fs, path::Path, process::Command, str::FromStr, sync::atomic::Ordering,
+    collections::BTreeSet, fmt::Display, fs, path::Path, process::Command, str::FromStr,
+    sync::atomic::Ordering,
 };
 
 use anyhow::{bail, Error, Result};
@@ -135,6 +136,26 @@ pub fn map_and_log_error<T, E: std::error::Error + Send + Sync + 'static>(
     }
 }
 
+/// Joins the items into a single string.
+/// The input `[1, 2, 3]` will result in a string "1, 2, 3".
+pub(crate) fn iter_to_string<I>(iterable: I) -> String
+where
+    I: IntoIterator,
+    I::Item: Display,
+{
+    // This function should ideally be replaced with `itertools::join()`.
+    // However, currently, it is only used to produce a proper debug message,
+    // which is not sufficient justification to add dependency to `itertools`.
+    let result = iterable.into_iter().fold(String::new(), |result, item| {
+        format!("{}{}, ", result, item)
+    });
+    if result.is_empty() {
+        result
+    } else {
+        String::from(&result[0..result.len() - 2])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,33 +279,48 @@ mod tests {
         command.arg(&script_path);
         assert_eq!(run_node(command).unwrap(), NodeExitCode::ShouldDowngrade);
     }
-}
 
-#[test]
-fn should_read_versions_from_dir() {
-    let tempdir = tempfile::tempdir().expect("should create temp dir");
-    fs::create_dir(tempdir.path().join("1_0_0")).unwrap();
-    fs::create_dir(tempdir.path().join("2_0_0")).unwrap();
-    fs::create_dir(tempdir.path().join("3_0_0")).unwrap();
-    fs::create_dir(tempdir.path().join("3_0_0_0")).unwrap();
-    fs::create_dir(tempdir.path().join("3_A")).unwrap();
-    fs::create_dir(tempdir.path().join("2_0_1")).unwrap();
-    fs::create_dir(tempdir.path().join("1_0_9145")).unwrap();
-    fs::create_dir(tempdir.path().join("1_454875135649876544411657897987_9145")).unwrap();
+    #[test]
+    fn should_read_versions_from_dir() {
+        let tempdir = tempfile::tempdir().expect("should create temp dir");
+        fs::create_dir(tempdir.path().join("1_0_0")).unwrap();
+        fs::create_dir(tempdir.path().join("2_0_0")).unwrap();
+        fs::create_dir(tempdir.path().join("3_0_0")).unwrap();
+        fs::create_dir(tempdir.path().join("3_0_0_0")).unwrap();
+        fs::create_dir(tempdir.path().join("3_A")).unwrap();
+        fs::create_dir(tempdir.path().join("2_0_1")).unwrap();
+        fs::create_dir(tempdir.path().join("1_0_9145")).unwrap();
+        fs::create_dir(tempdir.path().join("1_454875135649876544411657897987_9145")).unwrap();
 
-    // Should return in ascending order
-    let expected_version: BTreeSet<Version> = [
-        Version::new(1, 0, 0),
-        Version::new(1, 0, 9145),
-        Version::new(2, 0, 0),
-        Version::new(2, 0, 1),
-        Version::new(3, 0, 0),
-    ]
-    .iter()
-    .cloned()
-    .collect();
+        // Should return in ascending order
+        let expected_version: BTreeSet<Version> = [
+            Version::new(1, 0, 0),
+            Version::new(1, 0, 9145),
+            Version::new(2, 0, 0),
+            Version::new(2, 0, 1),
+            Version::new(3, 0, 0),
+        ]
+        .iter()
+        .cloned()
+        .collect();
 
-    let actual_versions = versions_from_path(tempdir.path()).unwrap();
+        let actual_versions = versions_from_path(tempdir.path()).unwrap();
 
-    assert_eq!(expected_version, actual_versions);
+        assert_eq!(expected_version, actual_versions);
+    }
+
+    #[test]
+    fn concatenates_iterable_values() {
+        let input = ["abc"];
+        let output = iter_to_string(input);
+        assert_eq!(output, "abc");
+
+        let input = ["a", "b", "c"];
+        let output = iter_to_string(input);
+        assert_eq!(output, "a, b, c");
+
+        let input = Vec::<i32>::new();
+        let output = iter_to_string(input);
+        assert_eq!(output, "");
+    }
 }

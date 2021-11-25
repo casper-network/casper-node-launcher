@@ -197,7 +197,7 @@ mod tests {
 
         // Try with a non-existent dir.
         let non_existent_dir = Path::new("not_a_dir");
-        let error = next_installed_version(&non_existent_dir, &current_version)
+        let error = next_installed_version(non_existent_dir, &current_version)
             .unwrap_err()
             .to_string();
         assert_eq!(

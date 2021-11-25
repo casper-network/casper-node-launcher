@@ -2,7 +2,7 @@
 use std::env;
 #[cfg(test)]
 use std::thread;
-use std::{fs, mem, path::PathBuf, process::Command};
+use std::{fmt::Debug, fs, mem, path::PathBuf, process::Command};
 
 use anyhow::{bail, Result};
 #[cfg(test)]
@@ -95,6 +95,16 @@ pub struct Launcher {
     state: State,
 }
 
+impl Default for Launcher {
+    fn default() -> Self {
+        Self {
+            binary_root_dir: Self::binary_root_dir(),
+            config_root_dir: Self::config_root_dir(),
+            state: Default::default(),
+        }
+    }
+}
+
 impl Launcher {
     /// Constructs a new `Launcher`.
     ///
@@ -116,54 +126,34 @@ impl Launcher {
             );
         }
 
-        let (mut launcher, version_to_run) = match fixed_version {
+        match fixed_version {
             Some(fixed_version) => {
-                let mut launcher = Launcher {
-                    binary_root_dir: Self::binary_root_dir(),
-                    config_root_dir: Self::config_root_dir(),
-                    state: State::default(),
-                };
-
-                launcher.state =
-                    State::RunNodeAsValidator(launcher.new_node_info(fixed_version.clone()));
-
-                (launcher, fixed_version)
+                // Run the requested node version.
+                let mut launcher = Launcher::default();
+                launcher.set_state(State::RunNodeAsValidator(
+                    launcher.new_node_info(fixed_version),
+                ))?;
+                Ok(launcher)
             }
             None => {
-                let mut launcher = Launcher {
-                    binary_root_dir: Self::binary_root_dir(),
-                    config_root_dir: Self::config_root_dir(),
-                    state: State::default(),
-                };
+                // If state file is missing, run most recent node version. Otherwise, resume from state.
+                let mut launcher = Launcher::default();
 
-                let state_path = launcher.state_path();
-                if state_path.exists() {
-                    debug!(path=%state_path.display(), "trying to read stored state");
-                    let contents = utils::map_and_log_error(
-                        fs::read_to_string(&state_path),
-                        format!("failed to read {}", state_path.display()),
-                    )?;
-
-                    launcher.state = utils::map_and_log_error(
-                        toml::from_str(&contents),
-                        format!("failed to parse {}", state_path.display()),
-                    )?;
-                    info!(path=%state_path.display(), "read stored state");
-                    return Ok(launcher);
+                let maybe_state = launcher.try_load_state()?;
+                info!(path=%launcher.state_path().display(), "read stored state");
+                match maybe_state {
+                    Some(read_state) => {
+                        launcher.state = read_state;
+                        Ok(launcher)
+                    }
+                    None => {
+                        let node_info = launcher.new_node_info(launcher.most_recent_version()?);
+                        launcher.set_state(State::RunNodeAsValidator(node_info))?;
+                        Ok(launcher)
+                    }
                 }
-
-                debug!(path=%state_path.display(), "stored state doesn't exist");
-
-                let most_recent_version = launcher.most_recent_version()?;
-
-                (launcher, most_recent_version)
             }
-        };
-
-        let node_info = launcher.new_node_info(version_to_run);
-        launcher.state = State::RunNodeAsValidator(node_info);
-        launcher.write()?;
-        Ok(launcher)
+        }
     }
 
     /// Runs the launcher, blocking indefinitely.
@@ -176,6 +166,35 @@ impl Launcher {
     /// Provides the path of the file for recording the state of the node-launcher.
     fn state_path(&self) -> PathBuf {
         self.config_root_dir.join(STATE_FILE_NAME)
+    }
+
+    /// Sets the given launcher state and stores it on disk.
+    fn set_state(&mut self, state: State) -> Result<()> {
+        self.state = state;
+        self.write()
+    }
+
+    /// Tries to load the stored state from disk.
+    fn try_load_state(&self) -> Result<Option<State>> {
+        let state_path = self.state_path();
+        state_path
+            .exists()
+            .then(|| {
+                debug!(path=%state_path.display(), "trying to read stored state");
+                let contents = utils::map_and_log_error(
+                    fs::read_to_string(&state_path),
+                    format!("failed to read {}", state_path.display()),
+                )?;
+
+                return Ok(Some(utils::map_and_log_error(
+                    toml::from_str(&contents),
+                    format!("failed to parse {}", state_path.display()),
+                )?));
+            })
+            .unwrap_or_else(|| {
+                debug!(path=%state_path.display(), "stored state doesn't exist");
+                Ok(None)
+            })
     }
 
     /// Writes `self` to the hard-coded location as a TOML-encoded file.

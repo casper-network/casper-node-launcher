@@ -114,7 +114,7 @@ impl Launcher {
     ///
     /// The launcher may also be instructed to run a fixed version of the node. In such case
     /// it'll run it in validator mode and store the version in the local state.
-    pub fn new(fixed_version: Option<Version>) -> Result<Self> {
+    pub fn new(forced_version: Option<Version>) -> Result<Self> {
         let installed_binary_versions = utils::versions_from_path(&Self::binary_root_dir())?;
         let installed_config_versions = utils::versions_from_path(&Self::config_root_dir())?;
 
@@ -126,14 +126,22 @@ impl Launcher {
             );
         }
 
-        match fixed_version {
-            Some(fixed_version) => {
-                // Run the requested node version.
-                let mut launcher = Launcher::default();
-                launcher.set_state(State::RunNodeAsValidator(
-                    launcher.new_node_info(fixed_version),
-                ))?;
-                Ok(launcher)
+        match forced_version {
+            Some(forced_version) => {
+                // Run the requested node version, if available.
+                if installed_binary_versions.contains(&forced_version) {
+                    let mut launcher = Launcher::default();
+                    launcher.set_state(State::RunNodeAsValidator(
+                        launcher.new_node_info(forced_version),
+                    ))?;
+                    Ok(launcher)
+                } else {
+                    info!(%forced_version, "the requested version is not installed");
+                    bail!(
+                        "the requested version ({}) is not installed",
+                        forced_version
+                    )
+                }
             }
             None => {
                 // If state file is missing, run most recent node version. Otherwise, resume from state.
@@ -866,5 +874,15 @@ mod tests {
         // an error.
         launcher.step().unwrap();
         assert_last_log_line_eq(&launcher, "Node v2.0.0 ran as validator");
+    }
+
+    #[test]
+    fn should_exit_when_requested_to_run_nonexisting_version() {
+        let _ = logging::init();
+
+        install_mock(&*V1, true);
+
+        let error = Launcher::new(Some(V2.clone())).unwrap_err().to_string();
+        assert_eq!(error, "the requested version (2.0.0) is not installed");
     }
 }

@@ -228,7 +228,7 @@ impl Launcher {
         let all_versions = utils::versions_from_path(&Self::binary_root_dir())?;
 
         // We are guaranteed to have at least one version in the `all_versions` container,
-        // because if there are no valid versions installed the `utils::versions_from_path()` will bail.
+        // because if there are no valid versions installed the `utils::versions_from_path()` bails.
         if let Some(most_recent_version) = all_versions.into_iter().last() {
             Ok(most_recent_version)
         } else {

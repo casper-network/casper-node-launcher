@@ -140,9 +140,9 @@ impl Launcher {
                 let mut launcher = Launcher::default();
 
                 let maybe_state = launcher.try_load_state()?;
-                info!(path=%launcher.state_path().display(), "read stored state");
                 match maybe_state {
                     Some(read_state) => {
+                        info!(path=%launcher.state_path().display(), "read stored state");
                         launcher.state = read_state;
                         Ok(launcher)
                     }

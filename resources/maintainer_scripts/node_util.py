@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import ipaddress
+import shutil
 import sys
 from pathlib import Path
 from urllib import request
@@ -229,6 +230,7 @@ class NodeUtil:
         bin_archive_path.unlink()
 
     def _get_external_ip(self):
+        """ Query multiple sources to get external IP of node """
         if self._external_ip:
             return self._external_ip
         services = (("https://checkip.amazonaws.com", "amazonaws.com"),
@@ -255,6 +257,7 @@ class NodeUtil:
 
     @staticmethod
     def _is_valid_ip(ip):
+        """ Check validity of ip address """
         try:
             _ = ipaddress.ip_address(ip)
         except ValueError:
@@ -262,8 +265,72 @@ class NodeUtil:
         else:
             return True
 
-    def _config_from_example(self, protocol_version, ip=None):
-        """ Create config.toml or config.toml.new (if previous exists) from config-example.toml"""
+    @staticmethod
+    def _toml_header(line_data):
+        data = line_data.strip()
+        length = len(data)
+        if data[0] == '[' and data[length - 1] == ']':
+            return data[1:length - 1]
+        return None
+
+    @staticmethod
+    def _toml_name_value(line_data):
+        data = line_data.strip().split(' = ')
+        if len(data) != 2:
+            raise ValueError(f"Expected `name = value` with _toml_name_value for {line_data}")
+        return data
+
+    @staticmethod
+    def _is_toml_comment_or_empty(line_data):
+        data = line_data.strip()
+        if len(data) == 0:
+            return True
+        if data[0] == '#':
+            return True
+        return False
+
+    @staticmethod
+    def _replace_config_values(config_data, replace_file):
+        """ Replace values in config_data with values for fields in replace_file """
+        replace_file_path = Path(replace_file)
+        if not replace_file_path.exists():
+            raise ValueError(f"Cannot replace values in config, {replace_file} does not exist.")
+        replace_data = replace_file_path.read_text().splitlines()
+        replacements = []
+        last_header = None
+        for line in replace_data:
+            if NodeUtil._is_toml_comment_or_empty(line):
+                continue
+            header = NodeUtil._toml_header(line)
+            if header is not None:
+                last_header = header
+                continue
+            name, value = NodeUtil._toml_name_value(line)
+            replacements.append((last_header, name, value))
+        new_output = []
+        last_header = None
+        for line in config_data.splitlines():
+            if NodeUtil._is_toml_comment_or_empty(line):
+                new_output.append(line)
+                continue
+            header = NodeUtil._toml_header(line)
+            if header is not None:
+                last_header = header
+                new_output.append(line)
+                continue
+            name, value = NodeUtil._toml_name_value(line)
+            replacement_value = [r_value for r_header, r_name, r_value in replacements
+                                 if last_header == r_header and name == r_name]
+            if replacement_value:
+                new_value = replacement_value[0]
+                print(f"Replacing {last_header}:{name} = {value} with {new_value}")
+                new_output.append(f"{name} = {new_value}")
+            else:
+                new_output.append(line)
+        return "\n".join(new_output)
+
+    def _config_from_example(self, protocol_version, ip=None, replace_toml=None):
+        """ Create config.toml or config.toml.new (if previous exists) from config-example.toml """
         self._verify_casper_user()
 
         config_path = NodeUtil.CONFIG_PATH / protocol_version
@@ -291,16 +358,45 @@ class NodeUtil:
             print(f"Previous {config_toml_path} exists, creating as {outfile} from {config_example}.")
             print(f"Replace {config_toml_path} with {outfile} to use the automatically generated configuration.")
 
-        outfile.write_text(config_example.read_text().replace("<IP ADDRESS>", ip))
+        config_text = config_example.read_text()
+        if replace_toml is not None:
+            config_text = NodeUtil._replace_config_values(config_text, replace_toml)
+
+        outfile.write_text(config_text.replace("<IP ADDRESS>", ip))
+
+    def config_from_example(self):
+        """ Create config.toml from config-example.toml. (use 'sudo -u casper') """
+        parser = argparse.ArgumentParser(description=self.config_from_example.__doc__,
+                                         usage=(f"{self.SCRIPT_NAME} config_from_example [-h] "
+                                                "protocol_version [--replace replace_file.toml] [--ip IP]"))
+        parser.add_argument("protocol_version", type=str, help=f"protocol version to create under")
+        parser.add_argument("--ip",
+                            type=ip_address,
+                            help=f"optional ip to use for config.toml instead of detected ip.",
+                            required=False)
+        parser.add_argument("--replace",
+                            type=str,
+                            help=("optional toml file that holds replacements to make to config.toml "
+                                  "from config-example.toml"),
+                            required=False)
+        args = parser.parse_args(sys.argv[2:])
+        ip = str(args.ip) if args.ip else None
+        self._config_from_example(args.protocol_version, ip, args.replace)
 
     def stage_protocols(self):
         """Stage available protocols if needed (use 'sudo -u casper')"""
         parser = argparse.ArgumentParser(description=self.stage_protocols.__doc__,
-                                         usage=f"{self.SCRIPT_NAME} stage_protocols [-h] config [--ip IP]")
+                                         usage=(f"{self.SCRIPT_NAME} stage_protocols [-h] config "
+                                                "[--ip IP] [--replace toml_file]"))
         parser.add_argument("config", type=str, help=f"name of config file to use from {NodeUtil.NET_CONFIG_PATH}")
         parser.add_argument("--ip",
                             type=ip_address,
                             help=f"optional ip to use for config.toml instead of detected ip.",
+                            required=False)
+        parser.add_argument("--replace",
+                            type=str,
+                            help=("optional toml file that holds replacements to make to config.toml "
+                                  "from config-example.toml"),
                             required=False)
         args = parser.parse_args(sys.argv[2:])
         self._load_config_values(args.config)
@@ -324,7 +420,7 @@ class NodeUtil:
             if status in (Status.UNSTAGED, Status.NO_CONFIG):
                 print(f"Creating config for {pv}.")
                 ip = str(args.ip) if args.ip else None
-                if not self._config_from_example(pv, ip):
+                if not self._config_from_example(pv, ip, args.replace):
                     exit_code = 1
         exit(exit_code)
 
@@ -451,7 +547,10 @@ class NodeUtil:
         # missing_ok=True arg to unlink only 3.8+, using try/catch.
         for path in self.DB_PATH.glob('*'):
             try:
-                path.unlink()
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
             except FileNotFoundError:
                 pass
         cnl_state = self.CONFIG_PATH / "casper-node-launcher-state.toml"
@@ -509,5 +608,4 @@ class NodeUtil:
 
 
 if __name__ == '__main__':
-
     NodeUtil()

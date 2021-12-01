@@ -229,12 +229,10 @@ impl Launcher {
 
         // We are guaranteed to have at least one version in the `all_versions` container,
         // because if there are no valid versions installed the `utils::versions_from_path()` bails.
-        if let Some(most_recent_version) = all_versions.into_iter().last() {
-            Ok(most_recent_version)
-        } else {
-            // `utils::versions_from_path()` will log a message for us
-            unreachable!();
-        }
+        Ok(all_versions
+            .into_iter()
+            .last()
+            .expect("must have at least one version"))
     }
 
     /// Gets the next installed version of the node binary and config.

@@ -3,6 +3,9 @@ set -e
 
 # This script will generate a CONFIG file appropriate to installation machine.
 
+echo "This script is deprecated and will be removed."
+echo "Use node_util.py config_from_example"
+
 USERNAME=casper
 
 if [ "$(whoami)" != "$USERNAME" ]; then

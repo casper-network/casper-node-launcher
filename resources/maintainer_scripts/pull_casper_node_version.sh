@@ -91,6 +91,9 @@ CONFIG_URL="$BASE_URL/$CONFIG_ARCHIVE"
 BIN_ARCHIVE="bin.tar.gz"
 BIN_URL="$BASE_URL/$BIN_ARCHIVE"
 
+echo "This script is deprecated and will be removed."
+echo "Use node_util.py stage_protocols"
+
 cd $ETC_PATH
 
 echo "Verifying semver Path"

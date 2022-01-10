@@ -55,3 +55,86 @@ indicates the version.  The default path for the casper-node-launcher binary is
 
 For testing purposes, the common folder `/var/lib/casper/bin` can be overridden by setting the environment variable
 `CASPER_BIN_DIR` to a different folder.
+
+## Number of Files Limit
+
+When `casper-node` launches, it tries to set the `nofiles` for the process to `64000`.  With some systems, this will
+hit the default hard limit of `4096`.
+
+Filehandles are used for both files and network connections.  The network connections are unpredictable and running
+out of file handles can stop critical file writes from occurring.  This limit may need to be increased from defaults.
+
+With `casper-node-launcher` running we can see what the system allocated by finding our process id (PID) for casper-node
+with `pgrep "casper-node$"`.
+
+```shell
+$ pgrep "casper-node$"
+275928
+```
+
+This PID will change so you need to run the above command to get the current version with your system.  
+It will not be `275928` each time. If you get no return, you do not have `casper-node-launcher` running properly.
+
+To find the current `nofile` (number of open files) hard limit, we can run `prlimit` with this PID:
+
+```shell
+$ sudo prlimit -n -p 275928
+RESOURCE DESCRIPTION              SOFT HARD UNITS
+NOFILE   max number of open files 1024 4096 files
+```
+
+We can embed both commands together so it is only `sudo prlimit -n -p $(pgrep "casper-node$")`.
+
+```shell
+$ sudo prlimit -n -p $(pgrep "casper-node$")
+RESOURCE DESCRIPTION              SOFT HARD UNITS
+NOFILE   max number of open files 1024 4096 files
+```
+
+If you receive `prlimit: option requires an argument -- 'p'` with the above command then `pgrep "casper-node$"` is not
+returning anything because `casper-node` is no longer running.
+
+### Manual increase
+
+This is how you set `nofile` for an active process.  It will make sure you don't have issues without having to 
+restart the `casper-node-launcher` and your node's `casper-node` process.
+
+We run `sudo prlimit --nofile=64000 --pid=$(pgrep "casper-node$")`.
+
+After this when we look at `prlimit` it should show the change:
+
+```shell
+$ sudo prlimit -n -p $(pgrep "casper-node$")
+RESOURCE DESCRIPTION               SOFT  HARD UNITS
+NOFILE   max number of open files 64000 64000 files
+```
+
+This is only active while the `casper-node` process is active and therefore will not persist across server reboots, 
+casper-node-launcher restarts, and protocol upgrades.  We need to do something else to make this permanent.
+
+### limits.conf
+
+Adding the `nofile` setting for `casper` user in `/etc/security/limits.conf` will persist this value.
+
+Add:
+
+`casper          hard    nofile          64000`
+
+to the bottom of `/etc/security/limits.conf`.
+
+After doing this you need to log out of any shells you have to enable this change. Restarting the node should
+maintain the correct `nofile` setting.
+
+### systemd unit modification (bad alternative)
+
+When `casper-node-launcher` is installed, `/lib/systemd/system/casper-node-launcher.service` is created.  
+Inside this file, a line is provided which will allow systemd to increase the `nofile` setting at launch.
+
+`#LimitNOFILE=64000`
+
+Editing this file with sudo will allow you to uncomment this line and save.  After saving you would need to run
+`sudo systemctl daemon-reload` to reload your changes.  Then you would need to restart `casper-node-launcher`.
+
+NOTE: The downside of using this method is that with upgrades to `casper-node-launcher`, the service file is replaced
+and the update would not be persistent.  Editing `/etc/security/limits.conf` is a much preferred method.
+

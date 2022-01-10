@@ -12,10 +12,10 @@ All notable changes to this project will be documented in this file.  The format
 ## [Unreleased]
 
 
-## [0.4.0] - 2022-01-10
+## [1.0.0] - 2022-01-10
 
 ### Added
-* Number of open files limit set to 64000 (from default 4096) in systemd unit.
+* Commented out line provided in systemd unit to allow users to set hard limit of files to 64000 (from default 4096).
 * node_util.py updates to expand capability
 * Deprecation warning to older scripts
 
@@ -78,7 +78,7 @@ Initial Public Release
 
 [Keep a Changelog]: https://keepachangelog.com/en/1.0.0
 [unreleased]: https://github.com/casper-network/casper-node-launcher/compare/v0.4.0...main
-[0.4.0]: https://github.com/casper-network/casper-node-launcher/compare/v0.3.5...v0.4.0
+[1.0.0]: https://github.com/casper-network/casper-node-launcher/compare/v0.3.5...v1.0.0
 [0.3.5]: https://github.com/casper-network/casper-node-launcher/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/casper-network/casper-node-launcher/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/casper-network/casper-node-launcher/compare/v0.3.2...v0.3.3

@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.  The format
 * Commented out line provided in systemd unit to allow users to set hard limit of files to 64000 (from default 4096).
 * node_util.py updates to expand capability
 * Deprecation warning to older scripts
+* README.md updates related to configuration of nofile limit
 
 ## [0.3.5] - 2021-10-25
 

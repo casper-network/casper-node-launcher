@@ -69,6 +69,7 @@ class NodeUtil:
 
     @staticmethod
     def _get_platform():
+        """ Support old default debian and then newer platforms with PLATFORM files """
         if NodeUtil.PLATFORM_PATH.exists():
             return NodeUtil.PLATFORM_PATH.read_text().strip()
         else:
@@ -101,7 +102,7 @@ class NodeUtil:
 
     def _get_protocols(self):
         """ Downloads protocol versions for network """
-        full_url = f"{self._network_url}/protocol_versions"
+        full_url = f"{self._url}/protocol_versions"
         r = request.urlopen(full_url)
         if r.status != 200:
             raise IOError(f"Expected status 200 requesting {full_url}, received {r.status}")
@@ -157,7 +158,8 @@ class NodeUtil:
                 return Status.WRONG_NETWORK
         return Status.STAGED
 
-    def _download_file(self, url, target_path):
+    @staticmethod
+    def _download_file(url, target_path):
         print(f"Downloading {url} to {target_path}")
         r = request.urlopen(url)
         if r.status != 200:
@@ -330,7 +332,10 @@ class NodeUtil:
         return "\n".join(new_output)
 
     def _config_from_example(self, protocol_version, ip=None, replace_toml=None):
-        """ Create config.toml or config.toml.new (if previous exists) from config-example.toml """
+        """
+        Internal Method to allow use in larger actions or direct call from config_from_example.
+        Create config.toml or config.toml.new (if previous exists) from config-example.toml
+        """
         self._verify_casper_user()
 
         config_path = NodeUtil.CONFIG_PATH / protocol_version
@@ -506,19 +511,19 @@ class NodeUtil:
         os.system("logrotate -f /etc/logrotate.d/casper-node")
 
     def restart(self):
-        """ Restart casper-node-launcher """
+        """ Restart casper-node-launcher (use 'sudo) """
         # Using stop, pause, start to get full reload not done with systemctl restart
         self.stop()
         time.sleep(1)
         self.start()
 
     def stop(self):
-        """ Stop casper-node-launcher """
+        """ Stop casper-node-launcher (use 'sudo') """
         self._verify_root_user()
         os.system("systemctl stop casper-node-launcher")
 
     def start(self):
-        """ Start casper-node-launcher """
+        """ Start casper-node-launcher (use 'sudo') """
         self._verify_root_user()
         os.system("systemctl start casper-node-launcher")
 
@@ -583,6 +588,7 @@ class NodeUtil:
 
     @staticmethod
     def _ip_address_type(ip_address: str):
+        """ Validation method for argparse """
         try:
             ip = ipaddress.ip_address(ip_address)
         except ValueError:
@@ -590,13 +596,12 @@ class NodeUtil:
         else:
             return str(ip)
 
-    def _get_status(self, ip, port):
+    @staticmethod
+    def _get_status(ip, port):
         """ Get status data from node """
         full_url = f"{ip}:{port}/status"
-        r = self._http.request('GET', full_url)
-        if r.status != 200:
-            raise IOError(f"Expected status 200 requesting {full_url}, received {r.status}")
-        return json.loads(r.data.decode('utf-8'))
+        r = request.urlopen(full_url)
+        return json.loads(r.read().decode('utf-8'))
 
     @staticmethod
     def _chainspec_name(chainspec_path) -> str:
@@ -605,6 +610,45 @@ class NodeUtil:
             NAME_DATA = "name = '"
             if line[:len(NAME_DATA)] == NAME_DATA:
                 return line.split(NAME_DATA)[1].split("'")[0]
+
+    @staticmethod
+    def _format_status(status):
+        error = status.get("error")
+        if error:
+            return f"status error: {error}"
+        block_info = status.get("last_added_block_info", {})
+        output = [
+            f"Peer Count: {len(status.get('peers', []))}",
+            f"Last Block: {block_info.get('height')} (Era: {block_info.get('era_id')})",
+            f"Uptime: {status.get('uptime', '')}",
+            f"Build: {status.get('build_version')}",
+            f"Next Upgrade: {status.get('next_upgrade')}",
+            ""
+        ]
+        return "\n".join(output)
+
+    def full_node_status(self):
+        """ Get full status of node """
+
+        node_ip = "localhost"
+        try:
+            status = self._get_status(f"http://{node_ip}", 8888)
+        except Exception as e:
+            status = {"error": e}
+        print(self._format_status(status))
+
+    def watch(self):
+        """ watch full_node_status """
+        DEFAULT = 5
+        MINIMUM = 5
+
+        parser = argparse.ArgumentParser(description=self.watch.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} watch [-h]")
+        parser.add_argument("-r", "--refresh", help="Refresh time in secs", type=int, default=DEFAULT, required=False)
+        args = parser.parse_args(sys.argv[2:])
+
+        refresh = MINIMUM if args.refresh < MINIMUM else args.refresh
+        os.system(f"watch -n {refresh} '{sys.argv[0]} full_node_status; systemctl status casper-node-launcher'")
 
 
 if __name__ == '__main__':

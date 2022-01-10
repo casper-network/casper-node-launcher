@@ -4,11 +4,26 @@ A binary which runs and upgrades the casper-node of the Casper network.
 
 ## Usage
 
-The casper-node-launcher takes no arguments other than the standard `--help` and `--version`.
+```
+    casper-node-launcher [OPTIONS]
 
-On startup, the launcher either tries to read its previously cached state from disk, or assumes a fresh start.  On a
-fresh start, the launcher searches for the lowest installed version of `casper-node` and starts running it in validator
-mode.
+OPTIONS:
+    -f, --force-version <version>    Forces the launcher to run the specified version of the node,
+                                     for example "1.2.3"
+    -h, --help                       Print help information
+    -V, --version                    Print version information
+```
+
+On startup, launcher checks whether the installed node binaries match the installed configs,
+by comparing the version numbers.  If not, it exits with an error.
+
+The launcher then checks if the `--force-version` parameter was provided.  If yes, it will unconditionally
+run the specified node, given it is installed.  The requested version is then cached in the state,
+so the subsequent runs of the launcher will continue to execute the previously requested version.
+
+If the `--force-version` parameter was not provided the launcher either tries to read its previously cached state
+from disk, or assumes a fresh start.  On a fresh start, the launcher searches for the highest installed
+version of `casper-node` and starts running it in validator mode.
 
 After every run of the `casper-node` binary in validator mode, the launcher does the following based upon the exit code
 returned by `casper-node`:

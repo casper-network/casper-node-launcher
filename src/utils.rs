@@ -1,4 +1,7 @@
-use std::{fs, path::Path, process::Command, str::FromStr, sync::atomic::Ordering};
+use std::{
+    collections::BTreeSet, fmt::Display, fs, path::Path, process::Command, str::FromStr,
+    sync::atomic::Ordering,
+};
 
 use anyhow::{bail, Error, Result};
 use semver::Version;
@@ -7,7 +10,7 @@ use tracing::{debug, warn};
 /// Represents the exit code of the node process.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 #[repr(i32)]
-pub enum NodeExitCode {
+pub(crate) enum NodeExitCode {
     /// Indicates a successful execution.
     Success = 0,
     /// Indicates the node version should be downgraded.
@@ -18,7 +21,10 @@ pub enum NodeExitCode {
 /// after `current_version`.
 ///
 /// Subdir names should be semvers with dots replaced with underscores.
-pub fn next_installed_version(dir: &Path, current_version: &Version) -> Result<Version> {
+pub(crate) fn next_installed_version<P: AsRef<Path>>(
+    dir: P,
+    current_version: &Version,
+) -> Result<Version> {
     let max_version = Version::new(u64::max_value(), u64::max_value(), u64::max_value());
 
     let mut next_version = max_version.clone();
@@ -39,7 +45,10 @@ pub fn next_installed_version(dir: &Path, current_version: &Version) -> Result<V
 /// before `current_version`.
 ///
 /// Subdir names should be semvers with dots replaced with underscores.
-pub fn previous_installed_version(dir: &Path, current_version: &Version) -> Result<Version> {
+pub(crate) fn previous_installed_version<P: AsRef<Path>>(
+    dir: P,
+    current_version: &Version,
+) -> Result<Version> {
     let min_version = Version::new(0, 0, 0);
 
     let mut previous_version = min_version.clone();
@@ -56,14 +65,18 @@ pub fn previous_installed_version(dir: &Path, current_version: &Version) -> Resu
     Ok(previous_version)
 }
 
-fn versions_from_path(dir: &Path) -> Result<Vec<Version>> {
-    let mut versions = vec![];
+pub(crate) fn versions_from_path<P: AsRef<Path>>(dir: P) -> Result<BTreeSet<Version>> {
+    let mut versions = BTreeSet::new();
 
     for entry in map_and_log_error(
-        fs::read_dir(dir),
-        format!("failed to read dir {}", dir.display()),
+        fs::read_dir(dir.as_ref()),
+        format!("failed to read dir {}", dir.as_ref().display()),
     )? {
-        let path = map_and_log_error(entry, format!("bad dir entry in {}", dir.display()))?.path();
+        let path = map_and_log_error(
+            entry,
+            format!("bad dir entry in {}", dir.as_ref().display()),
+        )?
+        .path();
         let subdir_name = match path.file_name() {
             Some(name) => name.to_string_lossy().replace("_", "."),
             None => {
@@ -71,7 +84,6 @@ fn versions_from_path(dir: &Path) -> Result<Vec<Version>> {
                 continue;
             }
         };
-
         let version = match Version::from_str(&subdir_name) {
             Ok(version) => version,
             Err(error) => {
@@ -80,13 +92,13 @@ fn versions_from_path(dir: &Path) -> Result<Vec<Version>> {
             }
         };
 
-        versions.push(version);
+        versions.insert(version);
     }
 
     if versions.is_empty() {
         let msg = format!(
             "failed to get a valid version from subdirs in {}",
-            dir.display()
+            dir.as_ref().display()
         );
         warn!("{}", msg);
         bail!(msg);
@@ -96,7 +108,7 @@ fn versions_from_path(dir: &Path) -> Result<Vec<Version>> {
 }
 
 /// Runs the given command as a child process.
-pub fn run_node(mut command: Command) -> Result<NodeExitCode> {
+pub(crate) fn run_node(mut command: Command) -> Result<NodeExitCode> {
     let mut child = map_and_log_error(command.spawn(), format!("failed to execute {:?}", command))?;
     crate::CHILD_PID.store(child.id(), Ordering::SeqCst);
 
@@ -121,7 +133,7 @@ pub fn run_node(mut command: Command) -> Result<NodeExitCode> {
 }
 
 /// Maps an error to a different type of error, while also logging the error at warn level.
-pub fn map_and_log_error<T, E: std::error::Error + Send + Sync + 'static>(
+pub(crate) fn map_and_log_error<T, E: std::error::Error + Send + Sync + 'static>(
     result: std::result::Result<T, E>,
     error_msg: String,
 ) -> Result<T> {
@@ -131,6 +143,26 @@ pub fn map_and_log_error<T, E: std::error::Error + Send + Sync + 'static>(
             warn!(%error, "{}", error_msg);
             Err(Error::new(error).context(error_msg))
         }
+    }
+}
+
+/// Joins the items into a single string.
+/// The input `[1, 2, 3]` will result in a string "1, 2, 3".
+pub(crate) fn iter_to_string<I>(iterable: I) -> String
+where
+    I: IntoIterator,
+    I::Item: Display,
+{
+    // This function should ideally be replaced with `itertools::join()`.
+    // However, currently, it is only used to produce a proper debug message,
+    // which is not sufficient justification to add a dependency to `itertools`.
+    let result = iterable.into_iter().fold(String::new(), |result, item| {
+        format!("{}{}, ", result, item)
+    });
+    if result.is_empty() {
+        result
+    } else {
+        String::from(&result[0..result.len() - 2])
     }
 }
 
@@ -175,7 +207,7 @@ mod tests {
 
         // Try with a non-existent dir.
         let non_existent_dir = Path::new("not_a_dir");
-        let error = next_installed_version(&non_existent_dir, &current_version)
+        let error = next_installed_version(non_existent_dir, &current_version)
             .unwrap_err()
             .to_string();
         assert_eq!(
@@ -256,5 +288,49 @@ mod tests {
         let mut command = Command::new("sh");
         command.arg(&script_path);
         assert_eq!(run_node(command).unwrap(), NodeExitCode::ShouldDowngrade);
+    }
+
+    #[test]
+    fn should_read_versions_from_dir() {
+        let tempdir = tempfile::tempdir().expect("should create temp dir");
+        fs::create_dir(tempdir.path().join("1_0_0")).unwrap();
+        fs::create_dir(tempdir.path().join("2_0_0")).unwrap();
+        fs::create_dir(tempdir.path().join("3_0_0")).unwrap();
+        fs::create_dir(tempdir.path().join("3_0_0_0")).unwrap();
+        fs::create_dir(tempdir.path().join("3_A")).unwrap();
+        fs::create_dir(tempdir.path().join("2_0_1")).unwrap();
+        fs::create_dir(tempdir.path().join("1_0_9145")).unwrap();
+        fs::create_dir(tempdir.path().join("1_454875135649876544411657897987_9145")).unwrap();
+
+        // Should return in ascending order
+        let expected_version: BTreeSet<Version> = [
+            Version::new(1, 0, 0),
+            Version::new(1, 0, 9145),
+            Version::new(2, 0, 0),
+            Version::new(2, 0, 1),
+            Version::new(3, 0, 0),
+        ]
+        .iter()
+        .cloned()
+        .collect();
+
+        let actual_versions = versions_from_path(tempdir.path()).unwrap();
+
+        assert_eq!(expected_version, actual_versions);
+    }
+
+    #[test]
+    fn concatenates_iterable_values() {
+        let input = ["abc"];
+        let output = iter_to_string(input);
+        assert_eq!(output, "abc");
+
+        let input = ["a", "b", "c"];
+        let output = iter_to_string(input);
+        assert_eq!(output, "a, b, c");
+
+        let input = Vec::<i32>::new();
+        let output = iter_to_string(input);
+        assert_eq!(output, "");
     }
 }

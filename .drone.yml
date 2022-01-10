@@ -18,7 +18,7 @@ steps:
   - name: cargo-audit
     image: casperlabs/casper-node-launcher-build
     commands:
-      - cargo audit --deny warnings
+      - cargo audit --deny warnings  --ignore RUSTSEC-2021-0119 --ignore RUSTSEC-2020-0159
 
   - name: test
     image: casperlabs/casper-node-launcher-build
@@ -30,24 +30,10 @@ steps:
     commands:
       - cargo deb
 
-  - name: build-docker
-    image: docker:stable
-    commands:
-      - apk add git bash
-      - ./ci/build_docker.sh
-    volumes:
-      - name: docker_sock
-        path: /var/run/docker.sock
-
   - name: build-rpm
     image: casperlabs/rpm-package
     commands:
       - cargo rpm build -v
-
-volumes:
-  - name: docker_sock
-    host:
-      path: /var/run/docker.sock
 
 trigger:
   branch:
@@ -128,29 +114,6 @@ steps:
       deb_path: './target/debian'
       deb_name: '*.deb'
 
-  - name: build-docker
-    image: docker:stable
-    commands:
-      - apk add git bash
-      - ./ci/build_docker.sh
-    volumes:
-      - name: docker_sock
-        path: /var/run/docker.sock
-
-  - name: push-docker
-    image: docker:stable
-    commands:
-      - apk add git bash
-      - ./ci/push_docker.sh
-    volumes:
-      - name: docker_sock
-        path: /var/run/docker.sock
-    environment:
-      DOCKER_USERNAME:
-        from_secret: docker_username
-      DOCKER_PASSWORD:
-        from_secret: docker_password
-
   - name: build-rpm
     image: casperlabs/rpm-package
     commands:
@@ -173,13 +136,6 @@ steps:
     when:
       ref:
         - refs/tags/v*
-
-  # Need to attach rpm to github artifacts.
-
-volumes:
-  - name: docker_sock
-    host:
-      path: /var/run/docker.sock
 
 trigger:
   ref:

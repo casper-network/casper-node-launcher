@@ -103,7 +103,7 @@ class NodeUtil:
 
     def _get_protocols(self):
         """ Downloads protocol versions for network """
-        full_url = f"{self._network_url}/protocol_versions"
+        full_url = f"{self._url}/protocol_versions"
         r = request.urlopen(full_url)
         if r.status != 200:
             raise IOError(f"Expected status 200 requesting {full_url}, received {r.status}")

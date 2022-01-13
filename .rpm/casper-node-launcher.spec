@@ -97,7 +97,6 @@ rm -rf %{buildroot}
 /etc/casper/pull_casper_node_version.sh
 /etc/casper/network_configs/casper.conf
 /etc/casper/network_configs/casper-test.conf
-/etc/casper/delete_local_db.sh
 /etc/casper/config_from_example.sh
 /etc/casper/node_util.py
 /etc/casper/README.md

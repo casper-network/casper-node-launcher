@@ -3,6 +3,8 @@
 # This script will pull casper-node software and associated files required to run or upgrade
 # casper-node.
 
+echo "This script is deprecated and will be removed. - Use node_util.py stage_protocols."
+
 USERNAME=casper
 ARGUMENT_EXAMPLES="<config filename in network_configs dir> <protocol version>"
 

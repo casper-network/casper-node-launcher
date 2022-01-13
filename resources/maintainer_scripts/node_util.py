@@ -41,6 +41,7 @@ class NodeUtil:
     NET_CONFIG_PATH = CONFIG_PATH / "network_configs"
     PLATFORM_PATH = CONFIG_PATH / "PLATFORM"
     SCRIPT_NAME = "node_util.py"
+    NODE_IP = "127.0.0.1"
 
     def __init__(self):
         self._network_name = None
@@ -528,7 +529,7 @@ class NodeUtil:
         os.system("systemctl start casper-node-launcher")
 
     @staticmethod
-    def status():
+    def systemd_status():
         """ Status of casper-node-launcher """
         # using op.popen to stop hanging return to terminate
         result = os.popen("systemctl status casper-node-launcher")
@@ -577,13 +578,18 @@ class NodeUtil:
             raise ValueError(f"/etc/casper/{version} not found.  Aborting.")
         if not bin_path.exists():
             raise ValueError(f"/var/lib/casper/bin/{version} not found.  Aborting.")
-        self._verify_casper_user()
+        # Need to be root to restart below
+        self._verify_root_user()
         state_path = self.CONFIG_PATH / "casper-node-launcher-state.toml"
         lines = ["mode = 'RunNodeAsValidator'",
                  f"version = '{version.replace('_','.')}'",
                  f"binary_path = '/var/lib/casper/bin/{version}/casper-node'",
                  f"config_path = '/etc/casper/{version}/config.toml'"]
         state_path.write_text("\n".join(lines))
+        # Make file casper:casper owned
+        import pwd
+        user = pwd.getpwnam('casper')
+        os.chown(state_path, user.pw_uid, user.pw_gid)
         self.restart()
 
     @staticmethod
@@ -597,9 +603,11 @@ class NodeUtil:
             return str(ip)
 
     @staticmethod
-    def _get_status(ip, port):
+    def _get_status(ip=None, port=8888):
         """ Get status data from node """
-        full_url = f"{ip}:{port}/status"
+        if ip is None:
+            ip = NodeUtil.NODE_IP
+        full_url = f"http://{ip}:{port}/status"
         r = request.urlopen(full_url)
         return json.loads(r.read().decode('utf-8'))
 
@@ -622,17 +630,18 @@ class NodeUtil:
             f"Last Block: {block_info.get('height')} (Era: {block_info.get('era_id')})",
             f"Uptime: {status.get('uptime', '')}",
             f"Build: {status.get('build_version')}",
+            f"Key: {status.get('our_public_signing_key')}",
             f"Next Upgrade: {status.get('next_upgrade')}",
             ""
         ]
         return "\n".join(output)
 
-    def full_node_status(self):
+    def node_status(self):
         """ Get full status of node """
 
         node_ip = "localhost"
         try:
-            status = self._get_status(f"http://{node_ip}", 8888)
+            status = self._get_status()
         except Exception as e:
             status = {"error": e}
         print(self._format_status(status))
@@ -648,7 +657,7 @@ class NodeUtil:
         args = parser.parse_args(sys.argv[2:])
 
         refresh = MINIMUM if args.refresh < MINIMUM else args.refresh
-        os.system(f"watch -n {refresh} '{sys.argv[0]} full_node_status; systemctl status casper-node-launcher'")
+        os.system(f"watch -n {refresh} '{sys.argv[0]} node_status; {sys.argv[0]} systemd_status'")
 
 
 if __name__ == '__main__':

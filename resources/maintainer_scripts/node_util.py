@@ -69,21 +69,18 @@ class NodeUtil:
         getattr(self, args.command)()
 
     @staticmethod
-    def _rpc_call(method: str, server: str, params: list, port: int = 7777):
+    def _rpc_call(method: str, server: str, params: list, port: int = 7777, timeout: int = 5):
         url = f"http://{server}:{port}/rpc"
         req = request.Request(url, method="POST")
         req.add_header('content-type', "application/json")
         req.add_header('cache-control', "no-cache")
         payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode()
-        try:
-            r = request.urlopen(req, data=payload)
-            json_data = json.loads(r.read())
-            return json_data["result"]
-        except Exception as e:
-            print(e)
+        r = request.urlopen(req, data=payload, timeout=timeout)
+        json_data = json.loads(r.read())
+        return json_data["result"]
 
     @staticmethod
-    def _rpc_get_block(server: str, block_height=None, port: int = 7777):
+    def _rpc_get_block(server: str, block_height=None, port: int = 7777, timeout: int = 5):
         """
         Get block based on block_hash, block_height, or last block if block_identifier is missing
         """
@@ -599,9 +596,11 @@ class NodeUtil:
         config_path = self.CONFIG_PATH / version
         bin_path = self.BIN_PATH / version
         if not config_path.exists():
-            raise ValueError(f"/etc/casper/{version} not found.  Aborting.")
+            print(f"/etc/casper/{version} not found.  Aborting.")
+            exit(1)
         if not bin_path.exists():
-            raise ValueError(f"/var/lib/casper/bin/{version} not found.  Aborting.")
+            print(f"/var/lib/casper/bin/{version} not found.  Aborting.")
+            exit(1)
         # Need to be root to restart below
         self._verify_root_user()
         state_path = self.CONFIG_PATH / "casper-node-launcher-state.toml"
@@ -632,7 +631,7 @@ class NodeUtil:
         if ip is None:
             ip = NodeUtil.NODE_IP
         full_url = f"http://{ip}:{port}/status"
-        r = request.urlopen(full_url)
+        r = request.urlopen(full_url, timeout=5)
         return json.loads(r.read().decode('utf-8'))
 
     @staticmethod
@@ -644,31 +643,63 @@ class NodeUtil:
                 return line.split(NAME_DATA)[1].split("'")[0]
 
     @staticmethod
-    def _format_status(status):
-        error = status.get("error")
-        if error:
-            return f"status error: {error}"
-        block_info = status.get("last_added_block_info", {})
-        output = [
-            f"Peer Count: {len(status.get('peers', []))}",
-            f"Last Block: {block_info.get('height')} (Era: {block_info.get('era_id')})",
-            f"Uptime: {status.get('uptime', '')}",
-            f"Build: {status.get('build_version')}",
-            f"Key: {status.get('our_public_signing_key')}",
-            f"Next Upgrade: {status.get('next_upgrade')}",
-            ""
-        ]
-        return "\n".join(output)
+    def _format_status(status, external_block_data=None):
+        try:
+            if status is None:
+                status = {}
+            error = status.get("error")
+            if error:
+                return f"status error: {error}"
+            block_info = status.get("last_added_block_info")
+            output = []
+            if block_info is not None:
+                cur_block = block_info.get('height')
+                output.append(f"Last Block: {cur_block} (Era: {block_info.get('era_id')})")
+                if external_block_data is not None:
+                    if len(external_block_data) > 1:
+                        output.append(f" Tip Block: {external_block_data[0]} (Era: {external_block_data[1]})")
+                        output.append(f"    Behind: {external_block_data[0] - cur_block}")
+                        output.append("")
+            output.extend([
+                f"Peer Count: {len(status.get('peers', []))}",
+                f"Uptime: {status.get('uptime', '')}",
+                f"Build: {status.get('build_version')}",
+                f"Key: {status.get('our_public_signing_key')}",
+                f"Next Upgrade: {status.get('next_upgrade')}",
+                ""
+            ])
+            return "\n".join(output)
+        except Exception:
+            return "Cannot parse status return."
+
+    @staticmethod
+    def _ip_status_height(ip):
+        try:
+            status = NodeUtil._get_status(ip=ip)
+            block_info = status.get("last_added_block_info")
+            if block_info is None:
+                return None
+            return block_info.get('height'), block_info.get('era_id')
+        except Exception:
+            return None
 
     def node_status(self):
         """ Get full status of node """
 
-        node_ip = "localhost"
+        parser = argparse.ArgumentParser(description=self.watch.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} node_status [-h] [--ip]")
+        parser.add_argument("--ip", help="ip address of a node at the tip",
+                            type=self._ip_address_type, required=False)
+        args = parser.parse_args(sys.argv[2:])
+
         try:
             status = self._get_status()
         except Exception as e:
             status = {"error": e}
-        print(self._format_status(status))
+        external_block_data = None
+        if args.ip:
+            external_block_data = self._ip_status_height(str(args.ip))
+        print(self._format_status(status, external_block_data))
 
     def watch(self):
         """ watch full_node_status """
@@ -676,12 +707,26 @@ class NodeUtil:
         MINIMUM = 5
 
         parser = argparse.ArgumentParser(description=self.watch.__doc__,
-                                         usage=f"{self.SCRIPT_NAME} watch [-h]")
+                                         usage=f"{self.SCRIPT_NAME} watch [-h] [-r] [--ip]")
         parser.add_argument("-r", "--refresh", help="Refresh time in secs", type=int, default=DEFAULT, required=False)
+        parser.add_argument("--ip", help="ip address of a node at the tip",
+                            type=self._ip_address_type, required=False)
         args = parser.parse_args(sys.argv[2:])
-
+        ip_arg = ""
+        if args.ip:
+            ip_arg = f"--ip {str(args.ip)}"
         refresh = MINIMUM if args.refresh < MINIMUM else args.refresh
-        os.system(f"watch -n {refresh} '{sys.argv[0]} node_status; {sys.argv[0]} systemd_status'")
+        os.system(f"watch -n {refresh} '{sys.argv[0]} node_status {ip_arg}; {sys.argv[0]} rpc_active; {sys.argv[0]} systemd_status'")
+
+    def rpc_active(self):
+        """ Is local RPC active? """
+        try:
+            block = self._rpc_get_block("127.0.0.1", timeout=1)
+            print("RPC: Ready\n")
+            exit(0)
+        except Exception:
+            print("RPC: Not Ready\n")
+            exit(1)
 
     def get_trusted_hash(self):
         """ Retrieve trusted hash from given node ip while verifying network """
@@ -700,17 +745,25 @@ class NodeUtil:
 
         args = parser.parse_args(sys.argv[2:])
 
-        status = self._get_status(args.ip)
-        remote_network_name = status["chainspec_name"]
+        status = None
+        try:
+            status = self._get_status(args.ip)
+        except Exception as e:
+            print(f"Error retrieving status from {args.ip}: {e}")
+            exit(1)
 
+        remote_network_name = status["chainspec_name"]
         chainspec_path = Path("/etc/casper") / args.protocol / "chainspec.toml"
+
         if not chainspec_path.exists():
             print(f"Cannot find {chainspec_path}, specify valid protocol folder to verify network name.")
             exit(1)
+
         chainspec_name = self._chainspec_name(chainspec_path)
         if chainspec_name != remote_network_name:
             print(f"Node network name: '{remote_network_name}' does not match {chainspec_path}: '{chainspec_name}'")
             exit(1)
+
         last_added_block_info = status["last_added_block_info"]
         if last_added_block_info is None:
             print(f"No last_added_block_info in {args.ip} status. Node is not in sync and will not be used.")
@@ -718,8 +771,15 @@ class NodeUtil:
         # If no block, getting latest so store now
         block_hash = last_added_block_info["hash"]
         if args.block:
-            block = self._rpc_get_block(server=args.ip, block_height=args.block)
-            block_hash = block["block"]["hash"]
+            try:
+                block = self._rpc_get_block(server=args.ip, block_height=args.block)
+                block_hash = block["block"]["hash"]
+            except Exception as e:
+                if "timed out" in str(e):
+                    print(f"RPC call timed out, either {args.ip} has RPC port blocked or is not in sync.")
+                else:
+                    print(f"Error calling RPC for {args.ip}.")
+                exit(1)
         print(f"{block_hash}")
 
 

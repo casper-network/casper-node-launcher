@@ -41,6 +41,7 @@ class NodeUtil:
     NET_CONFIG_PATH = CONFIG_PATH / "network_configs"
     PLATFORM_PATH = CONFIG_PATH / "PLATFORM"
     SCRIPT_NAME = "node_util.py"
+    NODE_IP = "127.0.0.1"
 
     def __init__(self):
         self._network_name = None
@@ -66,6 +67,30 @@ class NodeUtil:
         parser.add_argument("command", help="Subcommand to run.", choices=commands)
         args = parser.parse_args(sys.argv[1:2])
         getattr(self, args.command)()
+
+    @staticmethod
+    def _rpc_call(method: str, server: str, params: list, port: int = 7777):
+        url = f"http://{server}:{port}/rpc"
+        req = request.Request(url, method="POST")
+        req.add_header('content-type', "application/json")
+        req.add_header('cache-control', "no-cache")
+        payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode()
+        try:
+            r = request.urlopen(req, data=payload)
+            json_data = json.loads(r.read())
+            return json_data["result"]
+        except Exception as e:
+            print(e)
+
+    @staticmethod
+    def _rpc_get_block(server: str, block_height=None, port: int = 7777):
+        """
+        Get block based on block_hash, block_height, or last block if block_identifier is missing
+        """
+        params = []
+        if block_height:
+            params = [{"Height": block_height}]
+        return NodeUtil._rpc_call("chain_get_block", server, params, port)
 
     @staticmethod
     def _get_platform():
@@ -102,7 +127,7 @@ class NodeUtil:
 
     def _get_protocols(self):
         """ Downloads protocol versions for network """
-        full_url = f"{self._url}/protocol_versions"
+        full_url = f"{self._network_url}/protocol_versions"
         r = request.urlopen(full_url)
         if r.status != 200:
             raise IOError(f"Expected status 200 requesting {full_url}, received {r.status}")
@@ -528,7 +553,7 @@ class NodeUtil:
         os.system("systemctl start casper-node-launcher")
 
     @staticmethod
-    def status():
+    def systemd_status():
         """ Status of casper-node-launcher """
         # using op.popen to stop hanging return to terminate
         result = os.popen("systemctl status casper-node-launcher")
@@ -577,13 +602,18 @@ class NodeUtil:
             raise ValueError(f"/etc/casper/{version} not found.  Aborting.")
         if not bin_path.exists():
             raise ValueError(f"/var/lib/casper/bin/{version} not found.  Aborting.")
-        self._verify_casper_user()
+        # Need to be root to restart below
+        self._verify_root_user()
         state_path = self.CONFIG_PATH / "casper-node-launcher-state.toml"
         lines = ["mode = 'RunNodeAsValidator'",
                  f"version = '{version.replace('_','.')}'",
                  f"binary_path = '/var/lib/casper/bin/{version}/casper-node'",
                  f"config_path = '/etc/casper/{version}/config.toml'"]
         state_path.write_text("\n".join(lines))
+        # Make file casper:casper owned
+        import pwd
+        user = pwd.getpwnam('casper')
+        os.chown(state_path, user.pw_uid, user.pw_gid)
         self.restart()
 
     @staticmethod
@@ -597,9 +627,11 @@ class NodeUtil:
             return str(ip)
 
     @staticmethod
-    def _get_status(ip, port):
+    def _get_status(ip=None, port=8888):
         """ Get status data from node """
-        full_url = f"{ip}:{port}/status"
+        if ip is None:
+            ip = NodeUtil.NODE_IP
+        full_url = f"http://{ip}:{port}/status"
         r = request.urlopen(full_url)
         return json.loads(r.read().decode('utf-8'))
 
@@ -622,17 +654,18 @@ class NodeUtil:
             f"Last Block: {block_info.get('height')} (Era: {block_info.get('era_id')})",
             f"Uptime: {status.get('uptime', '')}",
             f"Build: {status.get('build_version')}",
+            f"Key: {status.get('our_public_signing_key')}",
             f"Next Upgrade: {status.get('next_upgrade')}",
             ""
         ]
         return "\n".join(output)
 
-    def full_node_status(self):
+    def node_status(self):
         """ Get full status of node """
 
         node_ip = "localhost"
         try:
-            status = self._get_status(f"http://{node_ip}", 8888)
+            status = self._get_status()
         except Exception as e:
             status = {"error": e}
         print(self._format_status(status))
@@ -648,7 +681,47 @@ class NodeUtil:
         args = parser.parse_args(sys.argv[2:])
 
         refresh = MINIMUM if args.refresh < MINIMUM else args.refresh
-        os.system(f"watch -n {refresh} '{sys.argv[0]} full_node_status; systemctl status casper-node-launcher'")
+        os.system(f"watch -n {refresh} '{sys.argv[0]} node_status; {sys.argv[0]} systemd_status'")
+
+    def get_trusted_hash(self):
+        """ Retrieve trusted hash from given node ip while verifying network """
+        parser = argparse.ArgumentParser(description=self.get_trusted_hash.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} get_trusted_hash ip [--protocol] [--block]")
+        parser.add_argument("ip",
+                            help="Trusted Node IP address ipv4 format",
+                            type=self._ip_address_type)
+        parser.add_argument("--protocol",
+                            help="Protocol version for config",
+                            required=False)
+        parser.add_argument("--block",
+                            help="Block number to use (latest if omitted)",
+                            required=False)
+
+        args = parser.parse_args(sys.argv[2:])
+
+        status = self._get_status(args.ip)
+        remote_network_name = status["chainspec_name"]
+
+        chainspec_path = Path("/etc/casper") / args.protocol / "chainspec.toml"
+        chainspec_name = self._chainspec_name(chainspec_path)
+        if chainspec_name != remote_network_name:
+            print(f"Node network name: '{remote_network_name}' does not match {chainspec_path}: '{chainspec_name}'")
+            exit(1)
+        last_added_block_info = status["last_added_block_info"]
+        if last_added_block_info is None:
+            print(f"No last_added_block_info in {args.ip} status. Node is not in sync and will not be used.")
+            exit(1)
+        # If no block, getting latest so store now
+        block_hash = last_added_block_info["hash"]
+        if args.block:
+            block = self._rpc_get_block(server=args.ip, block_height=args.block)
+            block_hash = block["block"]["hash"]
+        if not args.protocol:
+            print(block_hash)
+            return
+
+        # TODO: Replace hash in config.toml
+        pass
 
 
 if __name__ == '__main__':

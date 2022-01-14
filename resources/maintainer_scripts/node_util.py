@@ -691,8 +691,9 @@ class NodeUtil:
                             help="Trusted Node IP address ipv4 format",
                             type=self._ip_address_type)
         parser.add_argument("--protocol",
-                            help="Protocol version for config",
-                            required=False)
+                            help="Protocol version for chainspec to verify same network",
+                            required=False,
+                            default="1_0_0")
         parser.add_argument("--block",
                             help="Block number to use (latest if omitted)",
                             required=False)
@@ -703,6 +704,9 @@ class NodeUtil:
         remote_network_name = status["chainspec_name"]
 
         chainspec_path = Path("/etc/casper") / args.protocol / "chainspec.toml"
+        if not chainspec_path.exists():
+            print(f"Cannot find {chainspec_path}, specify valid protocol folder to verify network name.")
+            exit(1)
         chainspec_name = self._chainspec_name(chainspec_path)
         if chainspec_name != remote_network_name:
             print(f"Node network name: '{remote_network_name}' does not match {chainspec_path}: '{chainspec_name}'")
@@ -716,12 +720,7 @@ class NodeUtil:
         if args.block:
             block = self._rpc_get_block(server=args.ip, block_height=args.block)
             block_hash = block["block"]["hash"]
-        if not args.protocol:
-            print(block_hash)
-            return
-
-        # TODO: Replace hash in config.toml
-        pass
+        print(f"{block_hash}")
 
 
 if __name__ == '__main__':

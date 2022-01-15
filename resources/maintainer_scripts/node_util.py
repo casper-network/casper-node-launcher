@@ -74,8 +74,8 @@ class NodeUtil:
         req = request.Request(url, method="POST")
         req.add_header('content-type', "application/json")
         req.add_header('cache-control', "no-cache")
-        payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode()
-        r = request.urlopen(req, data=payload, timeout=timeout)
+        payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode('utf-8')
+        r = request.urlopen(req, payload, timeout=timeout)
         json_data = json.loads(r.read())
         return json_data["result"]
 
@@ -86,7 +86,7 @@ class NodeUtil:
         """
         params = []
         if block_height:
-            params = [{"Height": block_height}]
+            params = [{"Height": int(block_height)}]
         return NodeUtil._rpc_call("chain_get_block", server, params, port)
 
     @staticmethod

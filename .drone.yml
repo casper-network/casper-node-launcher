@@ -18,7 +18,7 @@ steps:
   - name: cargo-audit
     image: casperlabs/casper-node-launcher-build
     commands:
-      - cargo audit --deny warnings  --ignore RUSTSEC-2021-0119 --ignore RUSTSEC-2020-0159
+      - cargo audit --deny warnings
 
   - name: test
     image: casperlabs/casper-node-launcher-build

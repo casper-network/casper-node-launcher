@@ -275,7 +275,7 @@ impl Launcher {
 
     /// Constructs a new `NodeInfo` based on the given version.
     fn new_node_info(&self, version: Version) -> NodeInfo {
-        let subdir_name = version.to_string().replace(".", "_");
+        let subdir_name = version.to_string().replace('.', "_");
         NodeInfo {
             version,
             binary_path: self

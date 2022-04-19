@@ -252,6 +252,7 @@ class NodeUtil:
         self._extract_tar_gz(bin_archive_path, bin_full_path)
         print(f"Deleting {bin_archive_path}")
         bin_archive_path.unlink()
+        return True
 
     def _get_external_ip(self):
         """ Query multiple sources to get external IP of node """
@@ -390,6 +391,8 @@ class NodeUtil:
             config_text = NodeUtil._replace_config_values(config_text, replace_toml)
 
         outfile.write_text(config_text.replace("<IP ADDRESS>", ip))
+        
+        return True
 
     def config_from_example(self):
         """ Create config.toml from config-example.toml. (use 'sudo -u casper') """

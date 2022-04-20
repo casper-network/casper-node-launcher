@@ -491,8 +491,11 @@ class NodeUtil:
     @staticmethod
     def _walk_file_locations():
         for path in NodeUtil.BIN_PATH, NodeUtil.CONFIG_PATH, NodeUtil.DB_PATH:
-            for _path in NodeUtil._walk_path(path):
-                yield _path
+            try:
+                for _path in NodeUtil._walk_path(path):
+                    yield _path
+            except FileNotFoundError:
+                pass
 
     @staticmethod
     def _walk_path(path, include_dir=True):

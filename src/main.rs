@@ -15,7 +15,7 @@ use std::{
 
 use anyhow::Result;
 use backtrace::Backtrace;
-use clap::{crate_description, crate_version, App, Arg};
+use clap::{crate_description, crate_version, Arg, Command};
 use nix::{
     sys::signal::{self, Signal},
     unistd::Pid,
@@ -72,21 +72,20 @@ fn main() -> Result<()> {
     // this thread as it will block if the child process dies without a signal having been received
     // in the main launcher process.
     let _ = thread::spawn(signal_handler);
-
-    let app = App::new(APP_NAME)
+    let command = Command::new(APP_NAME)
         .version(crate_version!())
         .arg(
             Arg::new("force-version")
                 .short('f')
                 .long("force-version")
                 .value_name("version")
-                .about("Forces the launcher to run the specified version of the node, for example \"1.2.3\"")
+                .help("Forces the launcher to run the specified version of the node, for example \"1.2.3\"")
                 .validator(|arg: &str| Version::from_str(arg).map_err(|_| format!("unable to parse '{}' as version", arg)))
                 .required(false)
                 .takes_value(true),
         )
         .about(crate_description!());
-    let matches = app.get_matches();
+    let matches = command.get_matches();
 
     // Safe to unwrap() as we have the string validated by `clap` already.
     let forced_version = matches

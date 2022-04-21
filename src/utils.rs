@@ -78,7 +78,7 @@ pub(crate) fn versions_from_path<P: AsRef<Path>>(dir: P) -> Result<BTreeSet<Vers
         )?
         .path();
         let subdir_name = match path.file_name() {
-            Some(name) => name.to_string_lossy().replace("_", "."),
+            Some(name) => name.to_string_lossy().replace('_', "."),
             None => {
                 debug!("{} has no final path component", path.display());
                 continue;

@@ -74,8 +74,8 @@ class NodeUtil:
         req = request.Request(url, method="POST")
         req.add_header('content-type', "application/json")
         req.add_header('cache-control', "no-cache")
-        payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode()
-        r = request.urlopen(req, data=payload, timeout=timeout)
+        payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode('utf-8')
+        r = request.urlopen(req, payload, timeout=timeout)
         json_data = json.loads(r.read())
         return json_data["result"]
 
@@ -86,7 +86,7 @@ class NodeUtil:
         """
         params = []
         if block_height:
-            params = [{"Height": block_height}]
+            params = [{"Height": int(block_height)}]
         return NodeUtil._rpc_call("chain_get_block", server, params, port)
 
     @staticmethod
@@ -252,6 +252,7 @@ class NodeUtil:
         self._extract_tar_gz(bin_archive_path, bin_full_path)
         print(f"Deleting {bin_archive_path}")
         bin_archive_path.unlink()
+        return True
 
     def _get_external_ip(self):
         """ Query multiple sources to get external IP of node """
@@ -390,6 +391,8 @@ class NodeUtil:
             config_text = NodeUtil._replace_config_values(config_text, replace_toml)
 
         outfile.write_text(config_text.replace("<IP ADDRESS>", ip))
+        
+        return True
 
     def config_from_example(self):
         """ Create config.toml from config-example.toml. (use 'sudo -u casper') """
@@ -488,8 +491,11 @@ class NodeUtil:
     @staticmethod
     def _walk_file_locations():
         for path in NodeUtil.BIN_PATH, NodeUtil.CONFIG_PATH, NodeUtil.DB_PATH:
-            for _path in NodeUtil._walk_path(path):
-                yield _path
+            try:
+                for _path in NodeUtil._walk_path(path):
+                    yield _path
+            except FileNotFoundError:
+                pass
 
     @staticmethod
     def _walk_path(path, include_dir=True):

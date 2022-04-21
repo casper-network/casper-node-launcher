@@ -578,17 +578,27 @@ class NodeUtil:
             exit(1)
 
         # missing_ok=True arg to unlink only 3.8+, using try/catch.
-        for path in self.DB_PATH.glob('*'):
-            try:
-                if path.is_dir():
-                    shutil.rmtree(path)
-                else:
-                    path.unlink()
-            except FileNotFoundError:
-                pass
+        self._delete_directory(self.DB_PATH)
         cnl_state = self.CONFIG_PATH / "casper-node-launcher-state.toml"
         try:
             cnl_state.unlink()
+        except FileNotFoundError:
+            pass
+
+    @staticmethod
+    def _delete_directory(dir_path, remove_parent=False):
+        # missing_ok=True arg to unlink only 3.8+, using try/catch.
+        try:
+            for path in dir_path.glob('*'):
+                try:
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
+                except FileNotFoundError:
+                    pass
+            if remove_parent:
+                shutil.rmtree(dir_path)
         except FileNotFoundError:
             pass
 
@@ -620,6 +630,34 @@ class NodeUtil:
         user = pwd.getpwnam('casper')
         os.chown(state_path, user.pw_uid, user.pw_gid)
         self.restart()
+
+    def unstage_protocol(self):
+        """ Unstage (delete) a certain protocol version """
+        parser = argparse.ArgumentParser(description=self.force_run_version.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} unstage_protocol [-h] protocol_version")
+        parser.add_argument("protocol_version", help="Protocol version for casper-node-launcher to run.")
+        parser.add_argument("--verify_delete",
+                            action='store_true',
+                            help="Required for verification that you want to delete protocol",
+                            required=False)
+        args = parser.parse_args(sys.argv[2:])
+        version = args.protocol_version
+        config_path = self.CONFIG_PATH / version
+        bin_path = self.BIN_PATH / version
+        if not config_path.exists() and not bin_path.exists():
+            print(f"{config_path} and {bin_path} not found.  Aborting.")
+            exit(1)
+
+        if not args.verify_delete:
+            print(f"Include '--verify_delete' flag to confirm deleting protocol. Exiting.")
+            exit(1)
+        # Need to be root to delete
+        self._verify_root_user()
+
+        print(f"Deleting {config_path}...")
+        self._delete_directory(config_path, True)
+        print(f"Deleting {bin_path}...")
+        self._delete_directory(bin_path, True)
 
     @staticmethod
     def _ip_address_type(ip_address: str):

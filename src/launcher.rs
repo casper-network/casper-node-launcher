@@ -2,7 +2,12 @@
 use std::env;
 #[cfg(test)]
 use std::thread;
-use std::{fmt::Debug, fs, mem, path::PathBuf, process::Command};
+use std::{
+    fmt::Debug,
+    fs, mem,
+    path::{Path, PathBuf},
+    process::{self, Command},
+};
 
 use anyhow::{bail, Result};
 #[cfg(test)]
@@ -11,12 +16,14 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use tempfile::TempDir;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::utils::{self, NodeExitCode};
 
 /// The name of the file for the on-disk record of the node-launcher's current state.
 const STATE_FILE_NAME: &str = "casper-node-launcher-state.toml";
+/// The path of the node-launcher shutdown script.
+const SHUTDOWN_SCRIPT_PATH: &str = "/etc/casper/casper_shutdown_script";
 
 /// The folder under which casper-node binaries are installed.
 #[cfg(not(test))]
@@ -396,11 +403,36 @@ impl Launcher {
         Ok(())
     }
 
+    /// Runs the shutdown script if it exists and exits the node-launcher process
+    /// with the exit code returned by the script, otherwise returns 0.
+    fn run_shutdown_script(&mut self) -> Result<()> {
+        let exit_code = if Path::new(SHUTDOWN_SCRIPT_PATH).exists() {
+            info!("Running shutdown script at {}.", SHUTDOWN_SCRIPT_PATH);
+            let status = utils::map_and_log_error(
+                Command::new(SHUTDOWN_SCRIPT_PATH).status(),
+                format!("Couldn't execute script at {}", SHUTDOWN_SCRIPT_PATH),
+            )?;
+            status.code().unwrap_or_else(|| {
+                error!("Shutdown script was terminated by a signal.");
+                1
+            })
+        } else {
+            info!(
+                "Shutdown script not found at {}, exiting.",
+                SHUTDOWN_SCRIPT_PATH
+            );
+            0
+        };
+
+        process::exit(exit_code);
+    }
+
     /// Moves the launcher state forward.
     fn transition_state(&mut self, previous_exit_code: NodeExitCode) -> Result<()> {
         match previous_exit_code {
             NodeExitCode::Success => self.upgrade_state()?,
             NodeExitCode::ShouldDowngrade => self.downgrade_state()?,
+            NodeExitCode::ShouldExitLauncher => self.run_shutdown_script()?,
         }
         self.write()
     }

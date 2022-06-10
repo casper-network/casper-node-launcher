@@ -514,7 +514,7 @@ mod tests {
             );
         }
 
-        let subdir_name = new_version.to_string().replace(".", "_");
+        let subdir_name = new_version.to_string().replace('.', "_");
 
         // Create the node script contents.
         let old_version = Version::new(new_version.major - 1, new_version.minor, new_version.patch);

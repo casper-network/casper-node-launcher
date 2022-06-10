@@ -1,12 +1,12 @@
-#[cfg(not(test))]
-use std::env;
 #[cfg(test)]
 use std::thread;
+#[cfg(not(test))]
+use std::{env, process};
 use std::{
     fmt::Debug,
     fs, mem,
     path::{Path, PathBuf},
-    process::{self, Command},
+    process::Command,
 };
 
 use anyhow::{bail, Result};
@@ -23,7 +23,10 @@ use crate::utils::{self, NodeExitCode};
 /// The name of the file for the on-disk record of the node-launcher's current state.
 const STATE_FILE_NAME: &str = "casper-node-launcher-state.toml";
 /// The path of the node-launcher shutdown script.
+#[cfg(not(test))]
 const SHUTDOWN_SCRIPT_PATH: &str = "/etc/casper/casper_shutdown_script";
+#[cfg(test)]
+const SHUTDOWN_SCRIPT_PATH: &str = "/tmp/test_casper_shutdown_script";
 
 /// The folder under which casper-node binaries are installed.
 #[cfg(not(test))]
@@ -405,7 +408,7 @@ impl Launcher {
 
     /// Runs the shutdown script if it exists and exits the node-launcher process
     /// with the exit code returned by the script, otherwise returns 0.
-    fn run_shutdown_script(&mut self) -> Result<()> {
+    fn run_shutdown_script_and_exit(&mut self) -> Result<()> {
         let exit_code = if Path::new(SHUTDOWN_SCRIPT_PATH).exists() {
             info!("Running shutdown script at {}.", SHUTDOWN_SCRIPT_PATH);
             let status = utils::map_and_log_error(
@@ -424,7 +427,13 @@ impl Launcher {
             0
         };
 
+        #[cfg(not(test))]
         process::exit(exit_code);
+        #[cfg(test)]
+        {
+            info!("Terminated process with exit code {}", exit_code);
+            Ok(())
+        }
     }
 
     /// Moves the launcher state forward.
@@ -432,7 +441,7 @@ impl Launcher {
         match previous_exit_code {
             NodeExitCode::Success => self.upgrade_state()?,
             NodeExitCode::ShouldDowngrade => self.downgrade_state()?,
-            NodeExitCode::ShouldExitLauncher => self.run_shutdown_script()?,
+            NodeExitCode::ShouldExitLauncher => self.run_shutdown_script_and_exit()?,
         }
         self.write()
     }
@@ -485,6 +494,9 @@ mod tests {
     /// version of the mock node.  The mock sleeps for 1 second while running in validator mode, so
     /// 100ms should be enough to allow the node-launcher step to start.
     const DELAY_INSTALL_DURATION: Duration = Duration::from_millis(100);
+    const SHUTDOWN_SCRIPT_OUTPUT_PATH: &str = "/tmp/script_output";
+    const SHUTDOWN_SCRIPT_SUCCESS_OUTPUT: &str = "Shutdown script ran successfully";
+    const SHUTDOWN_SCRIPT_EXIT_CODE: i32 = 42;
     static V1: Lazy<Version> = Lazy::new(|| Version::new(1, 0, 0));
     static V2: Lazy<Version> = Lazy::new(|| Version::new(2, 0, 0));
     static V3: Lazy<Version> = Lazy::new(|| Version::new(3, 0, 0));
@@ -912,5 +924,45 @@ mod tests {
 
         let error = Launcher::new(Some(V2.clone())).unwrap_err().to_string();
         assert_eq!(error, "the requested version (2.0.0) is not installed");
+    }
+
+    #[test]
+    fn should_run_existing_shutdown_script() {
+        let _ = logging::init();
+
+        let script_path = Path::new(SHUTDOWN_SCRIPT_PATH);
+        let output_path = Path::new(SHUTDOWN_SCRIPT_OUTPUT_PATH);
+        if script_path.exists() {
+            fs::remove_file(script_path).expect("Couldn't remove existing test shutdown script");
+        }
+        if output_path.exists() {
+            fs::remove_file(output_path)
+                .expect("Couldn't remove existing test shutdown script output");
+        }
+        let script_contents = format!(
+            "#!/bin/bash\necho \"{}\" > {} && exit {}",
+            SHUTDOWN_SCRIPT_SUCCESS_OUTPUT, SHUTDOWN_SCRIPT_OUTPUT_PATH, SHUTDOWN_SCRIPT_EXIT_CODE
+        );
+        fs::write(script_path, script_contents).expect("Couldn't write shutdown script contents");
+        let mut script_perms = fs::metadata(script_path)
+            .expect("Couldn't read shutdown script permissions")
+            .permissions();
+        script_perms.set_mode(0o744);
+        fs::set_permissions(script_path, script_perms)
+            .expect("Couldn't modify shutdown script permissions");
+
+        install_mock(&*V1, true);
+        let mut launcher = Launcher::new(None).unwrap();
+        launcher
+            .transition_state(NodeExitCode::ShouldExitLauncher)
+            .expect("Should transition state");
+
+        assert_eq!(
+            fs::read_to_string(output_path).unwrap().trim_end(),
+            SHUTDOWN_SCRIPT_SUCCESS_OUTPUT
+        );
+
+        fs::remove_file(script_path).expect("Couldn't clean up test shutdown script");
+        fs::remove_file(output_path).expect("Couldn't clean up test shutdown script output");
     }
 }

@@ -410,18 +410,18 @@ impl Launcher {
     /// with the exit code returned by the script, otherwise returns 0.
     fn run_shutdown_script_and_exit(&mut self) -> Result<()> {
         let exit_code = if Path::new(SHUTDOWN_SCRIPT_PATH).exists() {
-            info!("Running shutdown script at {}.", SHUTDOWN_SCRIPT_PATH);
+            info!("running shutdown script at {}.", SHUTDOWN_SCRIPT_PATH);
             let status = utils::map_and_log_error(
                 Command::new(SHUTDOWN_SCRIPT_PATH).status(),
-                format!("Couldn't execute script at {}", SHUTDOWN_SCRIPT_PATH),
+                format!("couldn't execute script at {}", SHUTDOWN_SCRIPT_PATH),
             )?;
             status.code().unwrap_or_else(|| {
-                error!("Shutdown script was terminated by a signal.");
+                error!("shutdown script was terminated by a signal.");
                 1
             })
         } else {
             info!(
-                "Shutdown script not found at {}, exiting.",
+                "shutdown script not found at {}, exiting.",
                 SHUTDOWN_SCRIPT_PATH
             );
             0
@@ -431,7 +431,7 @@ impl Launcher {
         process::exit(exit_code);
         #[cfg(test)]
         {
-            info!("Terminated process with exit code {}", exit_code);
+            info!("terminated process with exit code {}", exit_code);
             Ok(())
         }
     }

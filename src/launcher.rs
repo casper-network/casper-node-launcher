@@ -27,6 +27,7 @@ const STATE_FILE_NAME: &str = "casper-node-launcher-state.toml";
 const SHUTDOWN_SCRIPT_PATH: &str = "/etc/casper/casper_shutdown_script";
 #[cfg(test)]
 const SHUTDOWN_SCRIPT_PATH: &str = "/tmp/test_casper_shutdown_script";
+const SHUTDOWN_TERMINATED_BY_SIGNAL_EXIT_CODE: i32 = 254;
 
 /// The folder under which casper-node binaries are installed.
 #[cfg(not(test))]
@@ -421,7 +422,7 @@ impl Launcher {
             )?;
             status.code().unwrap_or_else(|| {
                 error!("shutdown script was terminated by a signal.");
-                1
+                SHUTDOWN_TERMINATED_BY_SIGNAL_EXIT_CODE
             })
         } else {
             info!(

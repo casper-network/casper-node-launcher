@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+# This script is used to test that the launcher correctly interprets an exit code of 103 as an instruction to exit
+# and run the shutdown script.
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+VERSION=""
+MESSAGE="Node v${VERSION} shutting down"
+LOG_FILENAME="log.txt"
+
+# In tests, this script will be installed at e.g. <test dir>/bin/1_0_0.  We want to write the log to <test dir>.
+LOG_FILE="$(readlink -f $(dirname ${0})/../..)/${LOG_FILENAME}"
+
+log() {
+    printf "%s\n" "${1}" >> "${LOG_FILE}"
+}
+
+sleep 1
+log "${MESSAGE}"
+exit 103

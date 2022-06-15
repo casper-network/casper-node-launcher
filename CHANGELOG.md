@@ -10,7 +10,8 @@ All notable changes to this project will be documented in this file.  The format
 [comment]: <> (Security:   in case of vulnerabilities)
 
 ## [Unreleased]
-
+### Added
+* Launcher now handles node exit code `103` by running a script at `/etc/casper/casper_shutdown_script` and exiting with its exit code if present, otherwise returning 0.
 
 ## [1.0.0] - 2022-01-10
 

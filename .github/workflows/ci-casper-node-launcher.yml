@@ -1,0 +1,56 @@
+---
+name: ci-casper-node-launcher
+
+on:
+  push:
+    branches:
+      - "dev"
+      - "feat-*"
+      - "release-*"
+    paths-ignore:
+      - '**.md'
+
+  pull_request:
+    branches:
+      - "dev"
+      - "feat-*"
+      - "release-*"
+    paths-ignore:
+      - '**.md'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, ubuntu-20.04]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b #v3.0.2
+      - uses: Swatinem/rust-cache@cb2cf0cc7c5198d3364b9630e2c3d457f160790c #v1.4.0
+
+      - name: Update Stable Toolchain
+        run: rustup update stable
+
+      - name: fmt
+        run: cargo fmt -- --check
+
+      - name: clippy
+        run: cargo clippy -- --deny warnings
+
+      - name: audit
+        run: cargo audit --deny warnings  --ignore RUSTSEC-2021-0119 --ignore RUSTSEC-2020-0159
+
+      - name: test
+        run: cargo test
+
+      - name: deb
+        run: cargo deb
+
+      - name: rpm
+        run: |
+          cargo build --release
+          cargo generate-rpm

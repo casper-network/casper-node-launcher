@@ -1,0 +1,67 @@
+---
+name: publish-casper-node-launcher-rpm
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish-rpm:
+
+    runs-on: ubuntu-18.04
+
+    steps:
+      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b #v3.0.2
+      - uses: Swatinem/rust-cache@cb2cf0cc7c5198d3364b9630e2c3d457f160790c #v1.4.0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm awscli createrepo
+
+      - name: Install cargo-generate-rpm
+        run: cargo install cargo-generate-rpm
+
+      - name: Build release target
+        run: cargo build --release
+
+      - name: Strip debug symbols
+        run: strip -s target/release/casper-node-launcher
+
+      - name: Generate rpm
+        run: cargo generate-rpm
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@c8bb57c57e8df1be8c73ff3d59deab1dbc00e0d1 #v5.1.0
+        with:
+          gpg_private_key: ${{ secrets.GPG_PK }}
+          passphrase: ${{ secrets.GPG_PP }}
+
+      - name: Sign rpm
+        run: |
+          cp ci/rpmmacros ~/.rpmmacros
+          rpmsign --addsign ./target/generate-rpm/casper-node-launcher*.rpm
+
+      - name: Upload to s3 bucket
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.RPM_REPO_AK }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RPM_REPO_SK }}
+        run: ./ci/publish_rpm_to_repo.sh source_dir="./target/generate-rpm" target_bucket=${{secrets.RPM_BUCKET}}
+
+      - name: Invalidate cloudfront
+        uses: chetan/invalidate-cloudfront-action@c384d5f09592318a77b1e5c0c8d4772317e48b25 #v2.4
+        env:
+          DISTRIBUTION: ${{ secrets.DISTRIBUTION_ID }}
+          PATHS: "/*"
+          AWS_REGION: "us-east-1"
+          AWS_ACCESS_KEY_ID: ${{ secrets.RPM_REPO_AK }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RPM_REPO_SK }}
+
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@133984371c30d34e38222a64855679a414cb7575 #v2.3.0
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/generate-rpm/casper-node-launcher*
+          tag: ${{ github.ref }}
+          file_glob: true

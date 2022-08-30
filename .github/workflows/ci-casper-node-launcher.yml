@@ -25,14 +25,14 @@ jobs:
   build_and_test:
     strategy:
       matrix:
-        os: [ubuntu-18.04, ubuntu-20.04]
+        os: [ubuntu-18.04, ubuntu-20.04, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b #v3.0.2
       - uses: Swatinem/rust-cache@cb2cf0cc7c5198d3364b9630e2c3d457f160790c #v1.4.0
 
-      - name: Update Stable Toolchain
+      - name: update stable toolchain
         run: rustup update stable
 
       - name: fmt
@@ -42,10 +42,15 @@ jobs:
         run: cargo clippy -- --deny warnings
 
       - name: audit
-        run: cargo audit --deny warnings  --ignore RUSTSEC-2021-0119 --ignore RUSTSEC-2020-0159
+        run: cargo audit --deny warnings
 
       - name: test
         run: cargo test
+
+      - name: install cargo packaging tools
+        run: |
+          cargo install cargo-deb
+          cargo install cargo-generate-rpm
 
       - name: deb
         run: cargo deb

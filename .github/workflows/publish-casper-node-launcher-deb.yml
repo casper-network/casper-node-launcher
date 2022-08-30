@@ -15,12 +15,16 @@ jobs:
             code_name: bionic
           - os: ubuntu-20.04
             code_name: focal
+          - os: ubuntu-22.04
+            code_name: jammy
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b #v3.0.2
       - uses: Swatinem/rust-cache@cb2cf0cc7c5198d3364b9630e2c3d457f160790c #v1.4.0
+        with:
+          key: ${{ matrix.code_name }}
 
       - name: Install deps
         run: |
@@ -67,3 +71,11 @@ jobs:
           AWS_REGION: ${{ secrets.APTLY_REGION }}
           AWS_ACCESS_KEY_ID: ${{ secrets.APTLY_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.APTLY_SECRET_KEY }}
+
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@133984371c30d34e38222a64855679a414cb7575 #v2.3.0
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/debian/casper-node-launcher*
+          tag: ${{ github.ref }}
+          file_glob: true

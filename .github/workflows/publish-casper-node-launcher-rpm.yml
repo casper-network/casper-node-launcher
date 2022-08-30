@@ -9,7 +9,7 @@ on:
 jobs:
   publish-rpm:
 
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b #v3.0.2
@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y rpm awscli createrepo
+          sudo apt-get install -y rpm awscli createrepo-c
 
       - name: Install cargo-generate-rpm
         run: cargo install cargo-generate-rpm
@@ -47,6 +47,7 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.RPM_REPO_AK }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.RPM_REPO_SK }}
+          AWS_DEFAULT_REGION: ${{ secrets.RPM_REPO_REGION }}
         run: ./ci/publish_rpm_to_repo.sh source_dir="./target/generate-rpm" target_bucket=${{secrets.RPM_BUCKET}}
 
       - name: Invalidate cloudfront

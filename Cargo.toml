@@ -55,10 +55,16 @@ unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"
 restart-after-upgrade = false
 
 [package.metadata.deb.variants.bionic]
+name = "casper-node-launcher"
 revision = "0+bionic"
 
 [package.metadata.deb.variants.focal]
+name = "casper-node-launcher"
 revision = "0+focal"
+
+[package.metadata.deb.variants.jammy]
+name = "casper-node-launcher"
+revision = "0+jammy"
 
 [package.metadata.generate-rpm]
 license = "Apache 2.0"

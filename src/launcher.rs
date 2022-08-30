@@ -209,10 +209,10 @@ impl Launcher {
                     format!("failed to read {}", state_path.display()),
                 )?;
 
-                return Ok(Some(utils::map_and_log_error(
+                Ok(Some(utils::map_and_log_error(
                     toml::from_str(&contents),
                     format!("failed to parse {}", state_path.display()),
-                )?));
+                )?))
             })
             .unwrap_or_else(|| {
                 debug!(path=%state_path.display(), "stored state doesn't exist");

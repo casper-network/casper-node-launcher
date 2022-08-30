@@ -54,26 +54,30 @@ For information on using package, see https://github.com/CasperLabs/casper-node-
 unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"
 restart-after-upgrade = false
 
-[package.metadata.rpm]
-package = "casper-node-launcher"
+[package.metadata.deb.variants.bionic]
+name = "casper-node-launcher"
+revision = "0+bionic"
 
-[package.metadata.rpm.cargo]
-buildflags = ["--release"]
+[package.metadata.deb.variants.focal]
+name = "casper-node-launcher"
+revision = "0+focal"
 
-[package.metadata.rpm.systemd-units]
-unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"
-restart-after-upgrade = false
+[package.metadata.deb.variants.jammy]
+name = "casper-node-launcher"
+revision = "0+jammy"
 
-[package.metadata.rpm.targets]
-casper-node-launcher = { path = "/usr/bin/casper-node-launcher" }
-"../../resources/BIN_README.md" = {path = "/var/lib/casper/bin/README.md"}
-"../../resources/PLATFORM_RPM" = {path = "/etc/casper/PLATFORM"}
-"../../resources/maintainer_scripts/logrotate.d/casper-node" = {path = "/etc/logrotate.d/casper-node"}
-"../../resources/maintainer_scripts/pull_casper_node_version.sh" = {path = "/etc/casper/pull_casper_node_version.sh"}
-"../../resources/maintainer_scripts/network_configs/casper.conf" = {path = "/etc/casper/network_configs/casper.conf"}
-"../../resources/maintainer_scripts/network_configs/casper-test.conf" = {path = "/etc/casper/network_configs/casper-test.conf"}
-"../../resources/maintainer_scripts/config_from_example.sh" = {path = "/etc/casper/config_from_example.sh"}
-"../../resources/maintainer_scripts/node_util.py" = {path = "/etc/casper/node_util.py"}
-"../../resources/ETC_README.md" = {path = "/etc/casper/README.md"}
-"../../resources/VALIDATOR_KEYS_README.md" = {path = "/etc/casper/validator_keys/README.md"}
-"../../resources/maintainer_scripts/casper_node_launcher/casper-node-launcher.service" = {path = "/etc/systemd/system/casper-node-launcher.service"}
+[package.metadata.generate-rpm]
+license = "Apache 2.0"
+assets = [
+    { source = "target/release/casper-node-launcher", dest = "/usr/bin/casper-node-launcher", mode = "0755" },
+    { source = "resources/BIN_README.md", dest = "/var/lib/casper/bin/README.md", doc = true, mode = "0644" },
+    { source = "resources/PLATFORM_RPM", dest = "/etc/casper/PLATFORM", doc = true, mode = "0644" },
+    { source = "resources/maintainer_scripts/logrotate.d/casper-node", dest = "/etc/logrotate.d/casper-node", mode = "0644" },
+    { source = "resources/maintainer_scripts/pull_casper_node_version.sh", dest = "/etc/casper/pull_casper_node_version.sh", mode = "0755" },
+    { source = "resources/maintainer_scripts/network_configs/*", dest = "/etc/casper/network_configs/", mode = "0644" },
+    { source = "resources/maintainer_scripts/config_from_example.sh", dest = "/etc/casper/config_from_example.sh", mode = "0755" },
+    { source = "resources/maintainer_scripts/node_util.py", dest = "/etc/casper/node_util.py", mode = "0755" },
+    { source = "resources/ETC_README.md", dest = "/etc/casper/README.md", doc = true, mode = "0644" },
+    { source = "resources/VALIDATOR_KEYS_README.md", dest = "/etc/casper/validator_keys/README.md", doc = true, mode = "0644" },
+    { source = "resources/maintainer_scripts/casper_node_launcher/casper-node-launcher.service", dest = "/lib/systemd/system/casper-node-launcher.service", mode = "0644" }
+]

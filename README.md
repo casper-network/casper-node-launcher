@@ -30,6 +30,8 @@ returned by `casper-node`:
   * If 0 (success), searches for the immediate next installed version of `casper-node` and runs it in migrate-data mode
   * If 102 (downgrade), searches for the immediate previous installed version of `casper-node` and runs it in validator
     mode
+  * If 103 (shutdown), runs the script at `/etc/casper/casper_shutdown_script` if present and exits with its exit code,
+    otherwise exits with `0`.
   * Any other value causes the launcher to exit with an error
 
 After every run of the `casper-node` binary in migrate-data mode, the launcher does the following based upon the exit
@@ -37,6 +39,8 @@ code returned by `casper-node`:
   * If 0 (success), runs the same version of `casper-node` in validator mode
   * If 102 (downgrade), searches for the immediate previous installed version of `casper-node` and runs it in validator
     mode
+  * If 103 (shutdown), runs the script at `/etc/casper/casper_shutdown_script` if present and exits with its exit code,
+    otherwise exits with `0`.
   * Any other value causes the launcher to exit with an error
 
 If the launcher cannot find an appropriate version at any stage of upgrading or downgrading, it exits with an error.

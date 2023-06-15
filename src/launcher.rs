@@ -1,8 +1,13 @@
-#[cfg(not(test))]
-use std::env;
 #[cfg(test)]
 use std::thread;
-use std::{fmt::Debug, fs, mem, path::PathBuf, process::Command};
+#[cfg(not(test))]
+use std::{env, process};
+use std::{
+    fmt::Debug,
+    fs, mem,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::{bail, Result};
 #[cfg(test)]
@@ -11,12 +16,18 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use tempfile::TempDir;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::utils::{self, NodeExitCode};
 
 /// The name of the file for the on-disk record of the node-launcher's current state.
 const STATE_FILE_NAME: &str = "casper-node-launcher-state.toml";
+/// The path of the node-launcher shutdown script.
+#[cfg(not(test))]
+const SHUTDOWN_SCRIPT_PATH: &str = "/etc/casper/casper_shutdown_script";
+#[cfg(test)]
+const SHUTDOWN_SCRIPT_PATH: &str = "/tmp/test_casper_shutdown_script";
+const SHUTDOWN_TERMINATED_BY_SIGNAL_EXIT_CODE: i32 = 254;
 
 /// The folder under which casper-node binaries are installed.
 #[cfg(not(test))]
@@ -93,6 +104,8 @@ pub struct Launcher {
     binary_root_dir: PathBuf,
     config_root_dir: PathBuf,
     state: State,
+    #[cfg(test)]
+    exit_code: Option<i32>,
 }
 
 impl Default for Launcher {
@@ -101,6 +114,8 @@ impl Default for Launcher {
             binary_root_dir: Self::binary_root_dir(),
             config_root_dir: Self::config_root_dir(),
             state: Default::default(),
+            #[cfg(test)]
+            exit_code: None,
         }
     }
 }
@@ -275,7 +290,7 @@ impl Launcher {
 
     /// Constructs a new `NodeInfo` based on the given version.
     fn new_node_info(&self, version: Version) -> NodeInfo {
-        let subdir_name = version.to_string().replace(".", "_");
+        let subdir_name = version.to_string().replace('.', "_");
         NodeInfo {
             version,
             binary_path: self
@@ -396,11 +411,43 @@ impl Launcher {
         Ok(())
     }
 
+    /// Runs the shutdown script if it exists and exits the node-launcher process
+    /// with the exit code returned by the script, otherwise returns 0.
+    fn run_shutdown_script_and_exit(&mut self) -> Result<()> {
+        let exit_code = if Path::new(SHUTDOWN_SCRIPT_PATH).exists() {
+            info!("running shutdown script at {}.", SHUTDOWN_SCRIPT_PATH);
+            let status = utils::map_and_log_error(
+                Command::new(SHUTDOWN_SCRIPT_PATH).status(),
+                format!("couldn't execute script at {}", SHUTDOWN_SCRIPT_PATH),
+            )?;
+            status.code().unwrap_or_else(|| {
+                error!("shutdown script was terminated by a signal.");
+                SHUTDOWN_TERMINATED_BY_SIGNAL_EXIT_CODE
+            })
+        } else {
+            info!(
+                "shutdown script not found at {}, exiting.",
+                SHUTDOWN_SCRIPT_PATH
+            );
+            0
+        };
+
+        #[cfg(not(test))]
+        process::exit(exit_code);
+        #[cfg(test)]
+        {
+            info!("terminated process with exit code {}", exit_code);
+            self.exit_code = Some(exit_code);
+            Ok(())
+        }
+    }
+
     /// Moves the launcher state forward.
     fn transition_state(&mut self, previous_exit_code: NodeExitCode) -> Result<()> {
         match previous_exit_code {
             NodeExitCode::Success => self.upgrade_state()?,
             NodeExitCode::ShouldDowngrade => self.downgrade_state()?,
+            NodeExitCode::ShouldExitLauncher => self.run_shutdown_script_and_exit()?,
         }
         self.write()
     }
@@ -438,6 +485,11 @@ impl Launcher {
 
         self.transition_state(exit_code)
     }
+
+    #[cfg(test)]
+    pub(crate) fn exit_code(&self) -> Option<i32> {
+        self.exit_code
+    }
 }
 
 #[cfg(test)]
@@ -449,10 +501,13 @@ mod tests {
 
     const NODE_CONTENTS: &str = include_str!("../test_resources/casper-node.in");
     const DOWNGRADE_CONTENTS: &str = include_str!("../test_resources/downgrade.in");
+    const SHUTDOWN_CONTENTS: &str = include_str!("../test_resources/shutdown.in");
     /// The duration to wait after starting a mock casper-node instance before "installing" a new
     /// version of the mock node.  The mock sleeps for 1 second while running in validator mode, so
     /// 100ms should be enough to allow the node-launcher step to start.
     const DELAY_INSTALL_DURATION: Duration = Duration::from_millis(100);
+    const SHUTDOWN_SCRIPT_SUCCESS_OUTPUT: &str = "Shutdown script ran successfully";
+    const SHUTDOWN_SCRIPT_EXIT_CODE: i32 = 42;
     static V1: Lazy<Version> = Lazy::new(|| Version::new(1, 0, 0));
     static V2: Lazy<Version> = Lazy::new(|| Version::new(2, 0, 0));
     static V3: Lazy<Version> = Lazy::new(|| Version::new(3, 0, 0));
@@ -462,7 +517,7 @@ mod tests {
     ///
     /// If `upgrade` is false, installs a copy of the downgrade.sh script in place of the mock node
     /// script.  This script always exits with a code of 102.
-    fn install_mock(new_version: &Version, upgrade: bool) {
+    fn install_mock(new_version: &Version, desired_exit_code: NodeExitCode) {
         if thread::current().name().is_none() {
             panic!(
                 "install_mock must be called from the main test thread in order for \
@@ -470,14 +525,14 @@ mod tests {
             );
         }
 
-        let subdir_name = new_version.to_string().replace(".", "_");
+        let subdir_name = new_version.to_string().replace('.', "_");
 
         // Create the node script contents.
         let old_version = Version::new(new_version.major - 1, new_version.minor, new_version.patch);
-        let node_contents = if upgrade {
-            NODE_CONTENTS
-        } else {
-            DOWNGRADE_CONTENTS
+        let node_contents = match desired_exit_code {
+            NodeExitCode::Success => NODE_CONTENTS,
+            NodeExitCode::ShouldDowngrade => DOWNGRADE_CONTENTS,
+            NodeExitCode::ShouldExitLauncher => SHUTDOWN_CONTENTS,
         };
         let node_contents = node_contents.replace(
             r#"OLD_VERSION="""#,
@@ -532,7 +587,7 @@ mod tests {
     fn should_write_state_on_first_run() {
         let _ = logging::init();
 
-        install_mock(&*V1, true);
+        install_mock(&*V1, NodeExitCode::Success);
         let launcher = Launcher::new(None).unwrap();
         assert!(launcher.state_path().exists());
 
@@ -552,12 +607,12 @@ mod tests {
         let _ = logging::init();
 
         // Write the state to disk (RunNodeAsValidator for V1).
-        install_mock(&*V1, true);
+        install_mock(&*V1, NodeExitCode::Success);
         let _ = Launcher::new(None).unwrap();
 
         // Install a new version of node, but ensure a new launcher reads the state from disk rather
         // than detecting a new version.
-        install_mock(&*V2, true);
+        install_mock(&*V2, NodeExitCode::Success);
         let launcher = Launcher::new(None).unwrap();
 
         let expected_node_info = launcher.new_node_info(V1.clone());
@@ -570,7 +625,7 @@ mod tests {
         let _ = logging::init();
 
         // Write the state to disk (RunNodeAsValidator for V1).
-        install_mock(&*V1, true);
+        install_mock(&*V1, NodeExitCode::Success);
         let launcher = Launcher::new(None).unwrap();
 
         // Corrupt the stored state.
@@ -601,9 +656,9 @@ mod tests {
         let _ = logging::init();
 
         // Set up the test folders as if casper-node has just been staged at v3.0.0.
-        install_mock(&*V1, true);
-        install_mock(&*V2, true);
-        install_mock(&*V3, true);
+        install_mock(&*V1, NodeExitCode::Success);
+        install_mock(&*V2, NodeExitCode::Success);
+        install_mock(&*V3, NodeExitCode::Success);
 
         let mut launcher = Launcher::new(None).unwrap();
 
@@ -621,10 +676,10 @@ mod tests {
 
         // Set up the test folders as if casper-node has just been staged at v3.0.0,
         // but create the state file, so that the launcher launches the v1.0.0.
-        install_mock(&*V1, true);
+        install_mock(&*V1, NodeExitCode::Success);
         Launcher::new(None).unwrap();
-        install_mock(&*V2, true);
-        install_mock(&*V3, true);
+        install_mock(&*V2, NodeExitCode::Success);
+        install_mock(&*V3, NodeExitCode::Success);
 
         let mut launcher = Launcher::new(None).unwrap();
         // Run the launcher's first step - should run node v1.0.0 in validator mode.
@@ -655,7 +710,7 @@ mod tests {
     fn should_not_upgrade_to_lower_version() {
         let _ = logging::init();
 
-        install_mock(&*V2, true);
+        install_mock(&*V2, NodeExitCode::Success);
 
         // Set up a thread to run the launcher.
         let mut launcher = Launcher::new(None).unwrap();
@@ -669,7 +724,7 @@ mod tests {
 
         // Install node v1.0.0 after v2.0.0 has started running.
         thread::sleep(DELAY_INSTALL_DURATION);
-        install_mock(&*V1, true);
+        install_mock(&*V1, NodeExitCode::Success);
 
         worker.join().unwrap();
     }
@@ -680,7 +735,7 @@ mod tests {
 
         // Set up the test folders so that v3.0.0 is installed, but it will exit requesting a
         // downgrade.
-        install_mock(&*V3, false);
+        install_mock(&*V3, NodeExitCode::ShouldDowngrade);
 
         // Set up a thread to run the launcher.
         let mut launcher = Launcher::new(None).unwrap();
@@ -694,7 +749,7 @@ mod tests {
 
         // Install node v2.0.0 also as a downgrader after v3.0.0 has started running.
         thread::sleep(DELAY_INSTALL_DURATION);
-        install_mock(&*V2, false);
+        install_mock(&*V2, NodeExitCode::ShouldDowngrade);
 
         launcher = worker.join().unwrap();
 
@@ -709,7 +764,7 @@ mod tests {
 
         // Install node v2.0.0 also as a downgrader after v3.0.0 has started running.
         thread::sleep(DELAY_INSTALL_DURATION);
-        install_mock(&*V1, true);
+        install_mock(&*V1, NodeExitCode::Success);
 
         launcher = worker.join().unwrap();
 
@@ -724,7 +779,7 @@ mod tests {
 
         // Set up the test folders so that v2.0.0 is installed, but it will exit requesting a
         // downgrade.
-        install_mock(&*V2, false);
+        install_mock(&*V2, NodeExitCode::ShouldDowngrade);
 
         // Set up a thread to run the launcher.
         let mut launcher = Launcher::new(None).unwrap();
@@ -738,7 +793,7 @@ mod tests {
 
         // Install node v3.0.0 after v2.0.0 has started running.
         thread::sleep(DELAY_INSTALL_DURATION);
-        install_mock(&*V3, true);
+        install_mock(&*V3, NodeExitCode::Success);
 
         worker.join().unwrap();
     }
@@ -749,7 +804,7 @@ mod tests {
 
         // Set up the test folders as if casper-node has just been installed, but provide a config
         // file which will cause the node to crash as soon as it starts.
-        install_mock(&*V1, true);
+        install_mock(&*V1, NodeExitCode::Success);
         let mut launcher = Launcher::new(None).unwrap();
         let node_info = launcher.new_node_info(V1.clone());
         let bad_value = "bad value";
@@ -778,7 +833,7 @@ mod tests {
         let _ = logging::init();
 
         // Set up the test folders as if casper-node has just been installed.
-        install_mock(&*V1, true);
+        install_mock(&*V1, NodeExitCode::Success);
 
         // Set up a thread to run the launcher's first two steps.
         let mut launcher = Launcher::new(None).unwrap();
@@ -806,7 +861,7 @@ mod tests {
         // Install node v2.0.0 after v1.0.0 has started running, but provide a config file which
         // will cause the node to crash as soon as it starts.
         thread::sleep(DELAY_INSTALL_DURATION);
-        install_mock(&*V2, true);
+        install_mock(&*V2, NodeExitCode::Success);
         fs::write(&node_v2_info.config_path, bad_value.as_bytes()).unwrap();
 
         launcher = worker.join().unwrap();
@@ -822,9 +877,9 @@ mod tests {
     fn should_error_if_bin_and_config_have_different_versions() {
         let _ = logging::init();
 
-        install_mock(&*V1, true);
-        install_mock(&*V2, true);
-        install_mock(&*V3, true);
+        install_mock(&*V1, NodeExitCode::Success);
+        install_mock(&*V2, NodeExitCode::Success);
+        install_mock(&*V3, NodeExitCode::Success);
         // Rename config folders to emulate the difference.
         fs::rename(
             Launcher::config_root_dir().join("1_0_0"),
@@ -851,9 +906,9 @@ mod tests {
     fn should_run_forced_version_and_store_it_in_state() {
         let _ = logging::init();
 
-        install_mock(&*V1, true);
-        install_mock(&*V2, true);
-        install_mock(&*V3, true);
+        install_mock(&*V1, NodeExitCode::Success);
+        install_mock(&*V2, NodeExitCode::Success);
+        install_mock(&*V3, NodeExitCode::Success);
 
         let mut launcher = Launcher::new(Some(V2.clone())).unwrap();
 
@@ -876,9 +931,73 @@ mod tests {
     fn should_exit_when_requested_to_run_nonexisting_version() {
         let _ = logging::init();
 
-        install_mock(&*V1, true);
+        install_mock(&*V1, NodeExitCode::Success);
 
         let error = Launcher::new(Some(V2.clone())).unwrap_err().to_string();
         assert_eq!(error, "the requested version (2.0.0) is not installed");
+    }
+
+    #[test]
+    fn handle_run_shutdown_script() {
+        let _ = logging::init();
+
+        let script_path = Path::new(SHUTDOWN_SCRIPT_PATH);
+        let output_dir = tempfile::tempdir().expect("should create temp dir");
+        let output_path = output_dir.path().join("script_output");
+
+        // Ensure we start the test clean.
+        if script_path.exists() {
+            fs::remove_file(script_path).expect("Couldn't remove existing test shutdown script");
+        }
+        if output_path.exists() {
+            fs::remove_file(output_path.as_path())
+                .expect("Couldn't remove existing test shutdown script output");
+        }
+
+        // Write our test shutdown script.
+        let script_contents = format!(
+            "#!/bin/bash\necho \"{}\" > {} && exit {}",
+            SHUTDOWN_SCRIPT_SUCCESS_OUTPUT,
+            output_path.as_os_str().to_str().unwrap(),
+            SHUTDOWN_SCRIPT_EXIT_CODE
+        );
+        fs::write(script_path, script_contents).expect("Couldn't write shutdown script contents");
+        // Give it permission to execute.
+        let mut script_perms = fs::metadata(script_path)
+            .expect("Couldn't read shutdown script permissions")
+            .permissions();
+        script_perms.set_mode(0o744);
+        fs::set_permissions(script_path, script_perms)
+            .expect("Couldn't modify shutdown script permissions");
+
+        // Install the mock which exits with 103.
+        install_mock(&*V1, NodeExitCode::ShouldExitLauncher);
+        // Run a launcher with the script in place, should run it and return its exit code.
+        {
+            let mut launcher = Launcher::new(None).unwrap();
+            launcher.step().expect("should step");
+
+            assert_eq!(launcher.exit_code().unwrap(), SHUTDOWN_SCRIPT_EXIT_CODE);
+            assert_eq!(
+                fs::read_to_string(output_path.as_path())
+                    .unwrap()
+                    .trim_end(),
+                SHUTDOWN_SCRIPT_SUCCESS_OUTPUT
+            );
+        }
+
+        // We clean up the test resources to test the case where the script is not present.
+        // We do this in the same test to not have race conditions on the existance of the
+        // resources between tests, as the paths are hardcoded.
+        fs::remove_file(script_path).expect("Couldn't clean up test shutdown script");
+        fs::remove_file(output_path.as_path())
+            .expect("Couldn't clean up test shutdown script output");
+
+        {
+            let mut launcher = Launcher::new(None).unwrap();
+            launcher.step().expect("should step");
+            assert_eq!(launcher.exit_code().unwrap(), 0);
+            assert!(!output_path.exists());
+        }
     }
 }

@@ -650,6 +650,7 @@ class NodeUtil:
             error = status.get("error")
             if error:
                 return f"status error: {error}"
+            is_new_status = status.get("available_block_range") is not None
             block_info = status.get("last_added_block_info")
             output = []
             if block_info is not None:
@@ -665,9 +666,14 @@ class NodeUtil:
                 f"Uptime: {status.get('uptime', '')}",
                 f"Build: {status.get('build_version')}",
                 f"Key: {status.get('our_public_signing_key')}",
-                f"Next Upgrade: {status.get('next_upgrade')}",
-                ""
+                f"Next Upgrade: {status.get('next_upgrade')}"
             ])
+            if is_new_status:
+                output.append(f"Reactor State: {status.get('reactor_state', '')}")
+                abr = status.get("available_block_range", {"low": "", "high": ""})
+                output.append(f"Available Block Range - Low: {abr.get('low')}  High: {abr.get('high')}")
+            output.append("")
+
             return "\n".join(output)
         except Exception:
             return "Cannot parse status return."
@@ -716,7 +722,7 @@ class NodeUtil:
         if args.ip:
             ip_arg = f"--ip {str(args.ip)}"
         refresh = MINIMUM if args.refresh < MINIMUM else args.refresh
-        os.system(f"watch -n {refresh} '{sys.argv[0]} node_status {ip_arg}; {sys.argv[0]} rpc_active; {sys.argv[0]} systemd_status'")
+        os.system(f"watch -n {refresh} '{sys.argv[0]} node_status {ip_arg}; {sys.argv[0]} systemd_status'")
 
     def rpc_active(self):
         """ Is local RPC active? """

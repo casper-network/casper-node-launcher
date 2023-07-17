@@ -14,7 +14,8 @@ from shutil import chown
 import os
 import json
 import time
-
+import glob
+import tempfile
 
 # protocol 1_0_0 should have accounts.toml
 # All other protocols should have chainspec.toml, config.toml and NOT accounts.toml
@@ -710,7 +711,8 @@ class NodeUtil:
                 f"Uptime: {status.get('uptime', '')}",
                 f"Build: {status.get('build_version')}",
                 f"Key: {status.get('our_public_signing_key')}",
-                f"Next Upgrade: {status.get('next_upgrade')}"
+                f"Next Upgrade: {status.get('next_upgrade')}",
+                ""
             ])
             if is_new_status:
                 output.append(f"Reactor State: {status.get('reactor_state', '')}")
@@ -777,6 +779,50 @@ class NodeUtil:
         except Exception:
             print("RPC: Not Ready\n")
             exit(1)
+
+    def shift_ports(self):
+        """ Change ports in config.toml files to allow use of reverse proxy """
+        parser = argparse.ArgumentParser(description=self.shift_ports.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} shift_ports [--rpc] [--rest] [--sse]")
+        parser.add_argument("--rpc",
+                            help="Port to use for RPC",
+                            type=int,
+                            required=False,
+                            default=7770)
+        parser.add_argument("--rest",
+                            help="Port to use for REST",
+                            type=int,
+                            required=False,
+                            default=8880)
+        parser.add_argument("--sse",
+                            help="Port to use for SSE",
+                            type=int,
+                            required=False,
+                            default=9990)
+
+        args = parser.parse_args(sys.argv[2:])
+
+        self._verify_root_user()
+
+        for config_file in glob.glob("/etc/casper/*/config.toml"):
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as tmp_file:
+                with open(config_file) as src_file:
+                    for line in src_file:
+                        if "address = '0.0.0.0:7777'" in line:
+                            print(f"Changing RPC (7777) to port {args.rpc}")
+                            tmp_file.write(f"address = '0.0.0.0:{args.rpc}'\n")
+                        elif "address = '0.0.0.0:8888'" in line:
+                            print(f"Changing REST (8888) to port {args.rest}")
+                            tmp_file.write(f"address = '0.0.0.0:{args.rest}'\n")
+                        elif "address = '0.0.0.0:9999'" in line:
+                            print(f"Changing SSE (9999) to port {args.sse}")
+                            tmp_file.write(f"address = '0.0.0.0:{args.sse}'\n")
+                        else:
+                            tmp_file.write(line)
+            print(f"Replacing {config_file}")
+            # Preserve old permissions to new file before replacement
+            shutil.copystat(config_file, tmp_file.name)
+            shutil.move(tmp_file.name, config_file)
 
     def get_trusted_hash(self):
         """ Retrieve trusted hash from given node ip while verifying network """

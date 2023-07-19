@@ -130,8 +130,8 @@ impl Launcher {
     /// The launcher may also be instructed to run a fixed version of the node. In such case
     /// it'll run it in validator mode and store the version in the local state.
     pub fn new(forced_version: Option<Version>) -> Result<Self> {
-        let installed_binary_versions = utils::versions_from_path(&Self::binary_root_dir())?;
-        let installed_config_versions = utils::versions_from_path(&Self::config_root_dir())?;
+        let installed_binary_versions = utils::versions_from_path(Self::binary_root_dir())?;
+        let installed_config_versions = utils::versions_from_path(Self::config_root_dir())?;
 
         if installed_binary_versions != installed_config_versions {
             bail!(
@@ -209,10 +209,10 @@ impl Launcher {
                     format!("failed to read {}", state_path.display()),
                 )?;
 
-                return Ok(Some(utils::map_and_log_error(
+                Ok(Some(utils::map_and_log_error(
                     toml::from_str(&contents),
                     format!("failed to parse {}", state_path.display()),
-                )?));
+                )?))
             })
             .unwrap_or_else(|| {
                 debug!(path=%state_path.display(), "stored state doesn't exist");
@@ -240,7 +240,7 @@ impl Launcher {
     ///
     /// Returns an error when no correct versions can be detected.
     fn most_recent_version(&self) -> Result<Version> {
-        let all_versions = utils::versions_from_path(&Self::binary_root_dir())?;
+        let all_versions = utils::versions_from_path(Self::binary_root_dir())?;
 
         // We are guaranteed to have at least one version in the `all_versions` container,
         // because if there are no valid versions installed the `utils::versions_from_path()` bails.

@@ -13,7 +13,7 @@ license-file = "./LICENSE"
 [dependencies]
 anyhow = "1.0.38"
 backtrace = "0.3.56"
-clap = { version = "3.1.8", features = ["cargo"] }
+clap = { version = "3.2.25", features = ["cargo"] }
 once_cell = "1.5.2"
 nix = "0.23.0"
 semver = { version = "1.0.4", features = ["serde"] }
@@ -21,12 +21,12 @@ serde = { version = "1.0.120", features = ["derive"] }
 signal-hook = "0.3.4"
 toml = "0.5.8"
 tracing = "0.1.22"
-tracing-subscriber = { version = "0.3.2", features = ["json", "env-filter"] }
+tracing-subscriber = { version = "0.3.17", features = ["json", "env-filter"] }
 
 [dev-dependencies]
 once_cell = "1.5.2"
 rand_core = "0.6.2"
-tempfile = "3.2.0"
+tempfile = "3.6.0"
 
 [package.metadata.deb]
 depends = "curl"

@@ -37,10 +37,11 @@ steps:
 
 trigger:
   branch:
-    - main
-    - trying
-    - staging
-    - "release-*"
+    - disabled
+#    - main
+#    - trying
+#    - staging
+#    - "release-*"
   event:
     exclude:
       - tag
@@ -139,7 +140,7 @@ steps:
 
 trigger:
   ref:
-    - refs/tags/v*
+    - refs/tags/disabled-v*
 ---
 kind: pipeline
 type: docker

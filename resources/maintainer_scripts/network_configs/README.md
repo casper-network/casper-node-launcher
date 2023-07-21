@@ -4,7 +4,6 @@ Network configurations should be of the format:
 ```
 SOURCE_URL=<url for packages>
 NETWORK_NAME=<name of network>
-BIN_MODE=<mainnet|new>
 ```
 It is recommended that network_name used is the same as the <network_name>.conf.  This will be executed as 
 `source "$DIR/network_configs/<config_file>.conf` to load these variables.

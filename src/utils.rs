@@ -15,6 +15,8 @@ pub(crate) enum NodeExitCode {
     Success = 0,
     /// Indicates the node version should be downgraded.
     ShouldDowngrade = 102,
+    /// Indicates the node launcher should attempt to run the shutdown script.
+    ShouldExitLauncher = 103,
 }
 
 /// Iterates the given path, returning the subdir representing the immediate next SemVer version
@@ -78,7 +80,7 @@ pub(crate) fn versions_from_path<P: AsRef<Path>>(dir: P) -> Result<BTreeSet<Vers
         )?
         .path();
         let subdir_name = match path.file_name() {
-            Some(name) => name.to_string_lossy().replace("_", "."),
+            Some(name) => name.to_string_lossy().replace('_', "."),
             None => {
                 debug!("{} has no final path component", path.display());
                 continue;
@@ -124,6 +126,13 @@ pub(crate) fn run_node(mut command: Command) -> Result<NodeExitCode> {
         Some(code) if code == NodeExitCode::ShouldDowngrade as i32 => {
             debug!("finished running {:?} - should downgrade now", command);
             Ok(NodeExitCode::ShouldDowngrade)
+        }
+        Some(code) if code == NodeExitCode::ShouldExitLauncher as i32 => {
+            debug!(
+                "finished running {:?} - trying to run shutdown script now",
+                command
+            );
+            Ok(NodeExitCode::ShouldExitLauncher)
         }
         _ => {
             warn!(%exit_status, "failed running {:?}", command);

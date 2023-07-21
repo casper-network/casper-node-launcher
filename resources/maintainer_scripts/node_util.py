@@ -14,7 +14,8 @@ from shutil import chown
 import os
 import json
 import time
-
+import glob
+import tempfile
 
 # protocol 1_0_0 should have accounts.toml
 # All other protocols should have chainspec.toml, config.toml and NOT accounts.toml
@@ -74,8 +75,8 @@ class NodeUtil:
         req = request.Request(url, method="POST")
         req.add_header('content-type', "application/json")
         req.add_header('cache-control', "no-cache")
-        payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode()
-        r = request.urlopen(req, data=payload, timeout=timeout)
+        payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode('utf-8')
+        r = request.urlopen(req, payload, timeout=timeout)
         json_data = json.loads(r.read())
         return json_data["result"]
 
@@ -86,7 +87,7 @@ class NodeUtil:
         """
         params = []
         if block_height:
-            params = [{"Height": block_height}]
+            params = [{"Height": int(block_height)}]
         return NodeUtil._rpc_call("chain_get_block", server, params, port)
 
     @staticmethod
@@ -252,6 +253,7 @@ class NodeUtil:
         self._extract_tar_gz(bin_archive_path, bin_full_path)
         print(f"Deleting {bin_archive_path}")
         bin_archive_path.unlink()
+        return True
 
     def _get_external_ip(self):
         """ Query multiple sources to get external IP of node """
@@ -390,6 +392,8 @@ class NodeUtil:
             config_text = NodeUtil._replace_config_values(config_text, replace_toml)
 
         outfile.write_text(config_text.replace("<IP ADDRESS>", ip))
+        
+        return True
 
     def config_from_example(self):
         """ Create config.toml from config-example.toml. (use 'sudo -u casper') """
@@ -488,8 +492,11 @@ class NodeUtil:
     @staticmethod
     def _walk_file_locations():
         for path in NodeUtil.BIN_PATH, NodeUtil.CONFIG_PATH, NodeUtil.DB_PATH:
-            for _path in NodeUtil._walk_path(path):
-                yield _path
+            try:
+                for _path in NodeUtil._walk_path(path):
+                    yield _path
+            except FileNotFoundError:
+                pass
 
     @staticmethod
     def _walk_path(path, include_dir=True):
@@ -572,17 +579,27 @@ class NodeUtil:
             exit(1)
 
         # missing_ok=True arg to unlink only 3.8+, using try/catch.
-        for path in self.DB_PATH.glob('*'):
-            try:
-                if path.is_dir():
-                    shutil.rmtree(path)
-                else:
-                    path.unlink()
-            except FileNotFoundError:
-                pass
+        self._delete_directory(self.DB_PATH)
         cnl_state = self.CONFIG_PATH / "casper-node-launcher-state.toml"
         try:
             cnl_state.unlink()
+        except FileNotFoundError:
+            pass
+
+    @staticmethod
+    def _delete_directory(dir_path, remove_parent=False):
+        # missing_ok=True arg to unlink only 3.8+, using try/catch.
+        try:
+            for path in dir_path.glob('*'):
+                try:
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
+                except FileNotFoundError:
+                    pass
+            if remove_parent:
+                shutil.rmtree(dir_path)
         except FileNotFoundError:
             pass
 
@@ -614,6 +631,34 @@ class NodeUtil:
         user = pwd.getpwnam('casper')
         os.chown(state_path, user.pw_uid, user.pw_gid)
         self.restart()
+
+    def unstage_protocol(self):
+        """ Unstage (delete) a certain protocol version """
+        parser = argparse.ArgumentParser(description=self.force_run_version.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} unstage_protocol [-h] protocol_version")
+        parser.add_argument("protocol_version", help="Protocol version for casper-node-launcher to run.")
+        parser.add_argument("--verify_delete",
+                            action='store_true',
+                            help="Required for verification that you want to delete protocol",
+                            required=False)
+        args = parser.parse_args(sys.argv[2:])
+        version = args.protocol_version
+        config_path = self.CONFIG_PATH / version
+        bin_path = self.BIN_PATH / version
+        if not config_path.exists() and not bin_path.exists():
+            print(f"{config_path} and {bin_path} not found.  Aborting.")
+            exit(1)
+
+        if not args.verify_delete:
+            print(f"Include '--verify_delete' flag to confirm deleting protocol. Exiting.")
+            exit(1)
+        # Need to be root to delete
+        self._verify_root_user()
+
+        print(f"Deleting {config_path}...")
+        self._delete_directory(config_path, True)
+        print(f"Deleting {bin_path}...")
+        self._delete_directory(bin_path, True)
 
     @staticmethod
     def _ip_address_type(ip_address: str):
@@ -650,6 +695,7 @@ class NodeUtil:
             error = status.get("error")
             if error:
                 return f"status error: {error}"
+            is_new_status = status.get("available_block_range") is not None
             block_info = status.get("last_added_block_info")
             output = []
             if block_info is not None:
@@ -668,6 +714,12 @@ class NodeUtil:
                 f"Next Upgrade: {status.get('next_upgrade')}",
                 ""
             ])
+            if is_new_status:
+                output.append(f"Reactor State: {status.get('reactor_state', '')}")
+                abr = status.get("available_block_range", {"low": "", "high": ""})
+                output.append(f"Available Block Range - Low: {abr.get('low')}  High: {abr.get('high')}")
+            output.append("")
+
             return "\n".join(output)
         except Exception:
             return "Cannot parse status return."
@@ -716,7 +768,7 @@ class NodeUtil:
         if args.ip:
             ip_arg = f"--ip {str(args.ip)}"
         refresh = MINIMUM if args.refresh < MINIMUM else args.refresh
-        os.system(f"watch -n {refresh} '{sys.argv[0]} node_status {ip_arg}; {sys.argv[0]} rpc_active; {sys.argv[0]} systemd_status'")
+        os.system(f"watch -n {refresh} '{sys.argv[0]} node_status {ip_arg}; {sys.argv[0]} systemd_status'")
 
     def rpc_active(self):
         """ Is local RPC active? """
@@ -727,6 +779,50 @@ class NodeUtil:
         except Exception:
             print("RPC: Not Ready\n")
             exit(1)
+
+    def shift_ports(self):
+        """ Change ports in config.toml files to allow use of reverse proxy """
+        parser = argparse.ArgumentParser(description=self.shift_ports.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} shift_ports [--rpc] [--rest] [--sse]")
+        parser.add_argument("--rpc",
+                            help="Port to use for RPC",
+                            type=int,
+                            required=False,
+                            default=7770)
+        parser.add_argument("--rest",
+                            help="Port to use for REST",
+                            type=int,
+                            required=False,
+                            default=8880)
+        parser.add_argument("--sse",
+                            help="Port to use for SSE",
+                            type=int,
+                            required=False,
+                            default=9990)
+
+        args = parser.parse_args(sys.argv[2:])
+
+        self._verify_root_user()
+
+        for config_file in glob.glob("/etc/casper/*/config.toml"):
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as tmp_file:
+                with open(config_file) as src_file:
+                    for line in src_file:
+                        if "address = '0.0.0.0:7777'" in line:
+                            print(f"Changing RPC (7777) to port {args.rpc}")
+                            tmp_file.write(f"address = '0.0.0.0:{args.rpc}'\n")
+                        elif "address = '0.0.0.0:8888'" in line:
+                            print(f"Changing REST (8888) to port {args.rest}")
+                            tmp_file.write(f"address = '0.0.0.0:{args.rest}'\n")
+                        elif "address = '0.0.0.0:9999'" in line:
+                            print(f"Changing SSE (9999) to port {args.sse}")
+                            tmp_file.write(f"address = '0.0.0.0:{args.sse}'\n")
+                        else:
+                            tmp_file.write(line)
+            print(f"Replacing {config_file}")
+            # Preserve old permissions to new file before replacement
+            shutil.copystat(config_file, tmp_file.name)
+            shutil.move(tmp_file.name, config_file)
 
     def get_trusted_hash(self):
         """ Retrieve trusted hash from given node ip while verifying network """

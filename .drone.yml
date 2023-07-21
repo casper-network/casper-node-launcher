@@ -5,35 +5,35 @@ name: main-pipeline
 
 steps:
   - name: cargo-fmt
-    image: casperlabs/casper-node-launcher-build
+    image: casperlabs/node-build-u1804
     commands:
       - rustup update stable
       - cargo fmt -- --check
 
   - name: cargo-clippy
-    image: casperlabs/casper-node-launcher-build
+    image: casperlabs/node-build-u1804
     commands:
       - cargo clippy -- --deny warnings
 
   - name: cargo-audit
-    image: casperlabs/casper-node-launcher-build
+    image: casperlabs/node-build-u1804
     commands:
-      - cargo audit --deny warnings  --ignore RUSTSEC-2021-0119 --ignore RUSTSEC-2020-0159
+      - cargo audit --deny warnings
 
   - name: test
-    image: casperlabs/casper-node-launcher-build
+    image: casperlabs/node-build-u1804
     commands:
       - cargo test
 
   - name: build-deb
-    image: casperlabs/casper-node-launcher-build
+    image: casperlabs/node-build-u1804
     commands:
       - cargo deb
 
-  - name: build-rpm
-    image: casperlabs/rpm-package
-    commands:
-      - cargo rpm build -v
+#  - name: build-rpm
+#    image: casperlabs/rpm-package
+#    commands:
+#      - cargo rpm build -v
 
 trigger:
   branch:
@@ -87,7 +87,7 @@ name: release-by-tag
 
 steps:
   - name: build-deb
-    image: casperlabs/casper-node-launcher-build
+    image: casperlabs/node-build-u1804
     commands:
       - cargo deb
 
@@ -115,11 +115,11 @@ steps:
       deb_path: './target/debian'
       deb_name: '*.deb'
 
-  - name: build-rpm
-    image: casperlabs/rpm-package
-    commands:
-      - cargo rpm build -v
-
+#  - name: build-rpm
+#    image: casperlabs/rpm-package
+#    commands:
+#      - cargo rpm build -v
+#
 
   - name: publish-github-release
     image: plugins/github-release
@@ -131,7 +131,7 @@ steps:
         - md5
       files:
         - "./target/debian/*.deb"
-        - "./target/release/rpmbuild/RPMS/x86_64/*.rpm"
+#        - "./target/release/rpmbuild/RPMS/x86_64/*.rpm"
       prerelease:
         - true
     when:

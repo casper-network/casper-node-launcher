@@ -50,6 +50,9 @@ Package for Casper Node Launcher
 For information on using package, see https://github.com/CasperLabs/casper-node-launcher
 """
 
+[package.metadata.deb.variants.focal]
+# Nothing custom
+
 [package.metadata.deb.systemd-units]
 unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"
 restart-after-upgrade = false

@@ -29,6 +29,7 @@ rand_core = "0.6.2"
 tempfile = "3.6.0"
 
 [package.metadata.deb]
+name = "casper-node-launcher"
 depends = "curl"
 revision = "0"
 assets = [
@@ -51,7 +52,7 @@ For information on using package, see https://github.com/CasperLabs/casper-node-
 """
 
 [package.metadata.deb.variants.focal]
-# Nothing custom
+name = "casper-node-launcher"
 
 [package.metadata.deb.systemd-units]
 unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"

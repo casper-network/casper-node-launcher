@@ -37,9 +37,7 @@ assets = [
     ["./resources/BIN_README.md", "/var/lib/casper/bin/README.md", "755"],
     ["./resources/maintainer_scripts/logrotate.d/casper-node", "/etc/logrotate.d/casper-node", "644"],
     ["./resources/PLATFORM_DEB", "/etc/casper/PLATFORM", "644"],
-    ["./resources/maintainer_scripts/pull_casper_node_version.sh", "/etc/casper/pull_casper_node_version.sh", "755"],
     ["./resources/maintainer_scripts/network_configs/*", "/etc/casper/network_configs/", "644"],
-    ["./resources/maintainer_scripts/config_from_example.sh", "/etc/casper/config_from_example.sh", "755"],
     ["./resources/maintainer_scripts/node_util.py", "/etc/casper/node_util.py", "755"],
     ["./resources/ETC_README.md", "/etc/casper/README.md", "644"],
     ["./resources/VALIDATOR_KEYS_README.md", "/etc/casper/validator_keys/README.md", "644"]
@@ -52,7 +50,7 @@ For information on using package, see https://github.com/CasperLabs/casper-node-
 """
 
 [package.metadata.deb.variants.focal]
-name = "casper-node-launcher"
+# no changes
 
 [package.metadata.deb.systemd-units]
 unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"

@@ -1,6 +1,6 @@
 [package]
 name = "casper-node-launcher"
-version = "1.0.2"
+version = "1.0.3"
 authors = ["Fraser Hutchison <fraser@casperlabs.io>", "Joe Sacher <joe@casperlabs.io>"]
 edition = "2018"
 description = "A binary which runs and upgrades the casper-node of the Casper network"
@@ -46,15 +46,20 @@ maintainer-scripts = "./resources/maintainer_scripts/debian"
 extended-description = """
 Package for Casper Node Launcher
 
-For information on using package, see https://github.com/CasperLabs/casper-node-launcher
+For information on using package, see https://github.com/casper-network/casper-node-launcher
 """
 
 [package.metadata.deb.variants.focal]
-# no changes
+
 
 [package.metadata.deb.systemd-units]
-unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"
+unit-name = "casper-node-launcher"
+enable = true
+unit-scripts = "resources/maintainer_scripts/casper_node_launcher"
+start = false
 restart-after-upgrade = false
+stop-on-upgrade = false
+
 
 [package.metadata.rpm]
 package = "casper-node-launcher"
@@ -71,10 +76,8 @@ casper-node-launcher = { path = "/usr/bin/casper-node-launcher" }
 "../../resources/BIN_README.md" = {path = "/var/lib/casper/bin/README.md"}
 "../../resources/PLATFORM_RPM" = {path = "/etc/casper/PLATFORM"}
 "../../resources/maintainer_scripts/logrotate.d/casper-node" = {path = "/etc/logrotate.d/casper-node"}
-"../../resources/maintainer_scripts/pull_casper_node_version.sh" = {path = "/etc/casper/pull_casper_node_version.sh"}
 "../../resources/maintainer_scripts/network_configs/casper.conf" = {path = "/etc/casper/network_configs/casper.conf"}
 "../../resources/maintainer_scripts/network_configs/casper-test.conf" = {path = "/etc/casper/network_configs/casper-test.conf"}
-"../../resources/maintainer_scripts/config_from_example.sh" = {path = "/etc/casper/config_from_example.sh"}
 "../../resources/maintainer_scripts/node_util.py" = {path = "/etc/casper/node_util.py"}
 "../../resources/ETC_README.md" = {path = "/etc/casper/README.md"}
 "../../resources/VALIDATOR_KEYS_README.md" = {path = "/etc/casper/validator_keys/README.md"}

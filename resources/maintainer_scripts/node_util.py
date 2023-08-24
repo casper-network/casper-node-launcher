@@ -260,8 +260,8 @@ class NodeUtil:
         if self._external_ip:
             return self._external_ip
         services = (("https://checkip.amazonaws.com", "amazonaws.com"),
-                    ("https://ifconfig.me", "ifconfig.me"),
-                    ("https://ident.me", "ident.me"))
+                    ("https://4.icanhazip.com/", "icanhazip.com"),
+                    ("https://4.ident.me", "ident.me"))
         ips = []
         # Using our own PoolManager for shorter timeouts
         print("Querying your external IP...")
@@ -285,7 +285,7 @@ class NodeUtil:
     def _is_valid_ip(ip):
         """ Check validity of ip address """
         try:
-            _ = ipaddress.ip_address(ip)
+            _ = ipaddress.IPv4Network(ip)
         except ValueError:
             return False
         else:
@@ -878,6 +878,10 @@ class NodeUtil:
                 exit(1)
         print(f"{block_hash}")
 
+    def get_ip(self):
+        """ Get external IP of node. Can be used to test code used for automatically filling IP
+         or to check if you need to update the IP in your config.toml file. """
+        print(self._get_external_ip())
 
 if __name__ == '__main__':
     NodeUtil()

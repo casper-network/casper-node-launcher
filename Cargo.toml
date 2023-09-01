@@ -1,6 +1,6 @@
 [package]
 name = "casper-node-launcher"
-version = "1.0.3"
+version = "1.0.4"
 authors = ["Fraser Hutchison <fraser@casperlabs.io>", "Joe Sacher <joe@casperlabs.io>"]
 edition = "2018"
 description = "A binary which runs and upgrades the casper-node of the Casper network"

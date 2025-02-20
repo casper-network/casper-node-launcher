@@ -246,7 +246,7 @@ impl Launcher {
         // because if there are no valid versions installed the `utils::versions_from_path()` bails.
         Ok(all_versions
             .into_iter()
-            .last()
+            .next_back()
             .expect("must have at least one version"))
     }
 

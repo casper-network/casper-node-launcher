@@ -5,7 +5,7 @@
   compress
   daily
   rotate 7
-  size 1G
+  maxsize 1G
   missingok
   notifempty
   copytruncate

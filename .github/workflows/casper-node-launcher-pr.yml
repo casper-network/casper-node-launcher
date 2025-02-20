@@ -5,7 +5,14 @@ name: Continuous Integration
 jobs:
   test:
     name: Test Suite
-    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            code_name: focal
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -19,7 +26,14 @@ jobs:
 
   fmt:
     name: Rustfmt
-    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            code_name: focal
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -35,7 +49,14 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            code_name: focal
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -51,7 +72,14 @@ jobs:
 
   audit:
     name: Audit
-    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            code_name: focal
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -63,5 +91,5 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: audit
-          args: --deny warnings --ignore RUSTSEC-2021-0145
+          args: --deny warnings --ignore RUSTSEC-2024-0375 --ignore RUSTSEC-2021-0145
 

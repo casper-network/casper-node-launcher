@@ -212,22 +212,8 @@ class NodeUtil:
             print(f"Error: expected config file location {NodeUtil.CONFIG_PATH} not found.")
             exit(1)
 
-        # Expectation is one config.tar.gz but multiple bin*.tar.gz
-        # bin.tar.gz is mainnet bin and debian
-        # bin_new.tar.gz is post 1.4.0 launch and debian
-        # bin_rpm.tar.gz is mainnet bin and RHEL (_arch will be used for others in the future)
-        # bin_rpm_new.tar.gz is post 1.4.0 launch and RHEL
-
-        bin_file = "bin"
-        if platform != "deb":
-            # Handle alternative builds
-            bin_file += f"_{platform}"
-        if self._bin_mode != "mainnet":
-            # Handle non mainnet for post 1.4.0 launched networks
-            bin_file += "_new"
-        bin_file += ".tar.gz"
+        bin_file = "bin.tar.gz"
         config_file = "config.tar.gz"
-        print(f"Using bin mode file of {bin_file}")
 
         etc_full_path = NodeUtil.CONFIG_PATH / protocol_version
         bin_full_path = NodeUtil.BIN_PATH / protocol_version

@@ -4,7 +4,7 @@ mod logging;
 mod utils;
 
 use std::{
-    panic::{self, PanicInfo},
+    panic::{self, PanicHookInfo},
     str::FromStr,
     sync::{
         atomic::{AtomicU32, Ordering},
@@ -39,7 +39,7 @@ fn stop_child() {
 }
 
 /// A panic handler which ensures the child process is killed before this process exits.
-fn panic_hook(info: &PanicInfo) {
+fn panic_hook(info: &PanicHookInfo) {
     let backtrace = Backtrace::new();
 
     eprintln!("{:?}", backtrace);

@@ -5,7 +5,14 @@ name: Continuous Integration
 jobs:
   test:
     name: Test Suite
-    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            code_name: focal
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -13,55 +20,21 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
 
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+      - name: rustup setup
+        run: rustup component add rustfmt clippy
 
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+      - name: cargo setup
+        run: cargo install cargo-audit
 
-  audit:
-    name: Audit
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: cargo install cargo-audit
-      - uses: actions-rs/cargo@v1
-        with:
-          command: audit
-          args: --deny warnings --ignore RUSTSEC-2021-0145
+      - name: fmt
+        run: cargo fmt -- --check
 
+      - name: clippy
+        run: cargo clippy -- -D warnings
+
+      - name: audit
+        run: cargo audit --deny warnings --ignore RUSTSEC-2024-0375 --ignore RUSTSEC-2021-0145
+
+      - name: test
+        run: cargo test

@@ -27,7 +27,7 @@ pub(crate) fn next_installed_version<P: AsRef<Path>>(
     dir: P,
     current_version: &Version,
 ) -> Result<Version> {
-    let max_version = Version::new(u64::max_value(), u64::max_value(), u64::max_value());
+    let max_version = Version::new(u64::MAX, u64::MAX, u64::MAX);
 
     let mut next_version = max_version.clone();
     for installed_version in versions_from_path(dir)? {

@@ -1,6 +1,6 @@
 [package]
 name = "casper-node-launcher"
-version = "1.0.4"
+version = "1.0.5"
 authors = ["Fraser Hutchison <fraser@casperlabs.io>", "Joe Sacher <joe@casperlabs.io>"]
 edition = "2018"
 description = "A binary which runs and upgrades the casper-node of the Casper network"
@@ -25,7 +25,6 @@ tracing-subscriber = { version = "0.3.17", features = ["json", "env-filter"] }
 
 [dev-dependencies]
 once_cell = "1.5.2"
-rand_core = "0.6.2"
 tempfile = "3.6.0"
 
 [package.metadata.deb]
@@ -36,7 +35,6 @@ assets = [
     ["./target/release/casper-node-launcher", "/usr/bin/casper-node-launcher", "755"],
     ["./resources/BIN_README.md", "/var/lib/casper/bin/README.md", "755"],
     ["./resources/maintainer_scripts/logrotate.d/casper-node", "/etc/logrotate.d/casper-node", "644"],
-    ["./resources/PLATFORM_DEB", "/etc/casper/PLATFORM", "644"],
     ["./resources/maintainer_scripts/network_configs/*", "/etc/casper/network_configs/", "644"],
     ["./resources/maintainer_scripts/node_util.py", "/etc/casper/node_util.py", "755"],
     ["./resources/ETC_README.md", "/etc/casper/README.md", "644"],
@@ -51,34 +49,14 @@ For information on using package, see https://github.com/casper-network/casper-n
 
 [package.metadata.deb.variants.focal]
 
+[package.metadata.deb.variants.jammy]
+
+[package.metadata.deb.variants.noble]
 
 [package.metadata.deb.systemd-units]
 unit-name = "casper-node-launcher"
 enable = true
 unit-scripts = "resources/maintainer_scripts/casper_node_launcher"
 start = false
-restart-after-upgrade = false
+restart-after-upgrade = true
 stop-on-upgrade = false
-
-
-[package.metadata.rpm]
-package = "casper-node-launcher"
-
-[package.metadata.rpm.cargo]
-buildflags = ["--release"]
-
-[package.metadata.rpm.systemd-units]
-unit-scripts = "./resources/maintainer_scripts/casper_node_launcher"
-restart-after-upgrade = false
-
-[package.metadata.rpm.targets]
-casper-node-launcher = { path = "/usr/bin/casper-node-launcher" }
-"../../resources/BIN_README.md" = {path = "/var/lib/casper/bin/README.md"}
-"../../resources/PLATFORM_RPM" = {path = "/etc/casper/PLATFORM"}
-"../../resources/maintainer_scripts/logrotate.d/casper-node" = {path = "/etc/logrotate.d/casper-node"}
-"../../resources/maintainer_scripts/network_configs/casper.conf" = {path = "/etc/casper/network_configs/casper.conf"}
-"../../resources/maintainer_scripts/network_configs/casper-test.conf" = {path = "/etc/casper/network_configs/casper-test.conf"}
-"../../resources/maintainer_scripts/node_util.py" = {path = "/etc/casper/node_util.py"}
-"../../resources/ETC_README.md" = {path = "/etc/casper/README.md"}
-"../../resources/VALIDATOR_KEYS_README.md" = {path = "/etc/casper/validator_keys/README.md"}
-"../../resources/maintainer_scripts/casper_node_launcher/casper-node-launcher.service" = {path = "/etc/systemd/system/casper-node-launcher.service"}

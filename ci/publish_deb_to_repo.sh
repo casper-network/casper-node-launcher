@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
-# DEFAULTS
-PLUGIN_OS_CODENAME="${PLUGIN_OS_CODENAME:-bionic}"
-
 # Verify all variables are present
 if [[ -z $PLUGIN_GPG_KEY || -z $PLUGIN_GPG_PASS || -z $PLUGIN_REGION \
         || -z $PLUGIN_REPO_NAME || -z $PLUGIN_ACL || -z $PLUGIN_PREFIX \
-        || -z $AWS_SECRET_ACCESS_KEY || -z $AWS_ACCESS_KEY_ID \
         || -z $PLUGIN_DEB_PATH || -z $PLUGIN_OS_CODENAME ]]; then
     echo "ERROR: Environment Variable Missing!"
     exit 1
@@ -15,7 +11,7 @@ fi
 
 # Verify if its the first time publishing. Will need to know later.
 # Probably an easier way to do this check :)
-EXISTS=$(aws s3 ls s3://"$PLUGIN_REPO_NAME"/releases/dists/ --region "$PLUGIN_REGION" | grep "$PLUGIN_OS_CODENAME") || EXISTS_RET="false"
+EXISTS_RET=$(aws s3 ls s3://"$PLUGIN_REPO_NAME"/releases/dists/ --region "$PLUGIN_REGION" | grep "$PLUGIN_OS_CODENAME") || EXISTS_RET="false"
 
 # Sanity Check for later
 if [ "$EXISTS_RET" = "false" ]; then

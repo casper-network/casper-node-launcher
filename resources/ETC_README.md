@@ -4,7 +4,7 @@ This package runs the casper-node software and handles changing execution to new
 determined times based on configuration.  This allows simultaneous upgrading of all nodes on the
 network.
 
-Please refer to http://docs.casperlabs.io for information on how to run a node.
+Please refer to http://docs.casper.network for information on how to run a node.
 
 ## systemd
 
@@ -44,30 +44,34 @@ To start service:
 
 `sudo systemctl start casper-node-launcher`
 
+Or use the node utility script:
+
+`sudo /etc/casper/node_util.py start`
+
 To stop:
 
 `sudo systemctl stop casper-node-launcher`
 
+Or use the node utility script:
+
+`sudo /etc/casper/node_util.py stop`
+
 ## Local Storage
 
-If you need to delete the db for a new run,
-you can use the script in `/etc/casper` with `sudo /etc/casper/delete_local_db.sh`.
+If you need to delete the db for a new run use:
+
+`sudo /etc/casper/node_util.py delete_local_state`
 
 ## Staging casper-node protocols
 
-Upgrading is done by staging a new casper-node and configuration prior to the agreed upgrade era.
+Upgrading is done by staging a new casper-node and configuration prior to the agreed upgrade era. This is done with:
 
-To simplify this, the `sudo -u casper /etc/casper/pull_casper_node_version.sh [network config] [semver]` script is included.  This will
-pull files from the appropriate version.  If desired, the casper-node can be built from source at the 
-same version.
-
-To get a working default config.toml for a protocol version: `sudo -u casper /etc/casper/config_from_example.sh [semver]`.
-
+`sudo -u casper /etc/casper/node_util.py stage_protocols [network config]`
 
 When the upgrade era occurs, the currently running casper-node will exit and casper-node-launcher will
 start the new upgraded version of casper-node.
 
 ## Bugs
 
-Please file any bugs as issues on the launcher at [the casper-node-launcher GitHub repo](https://github.com/CasperLabs/casper-node-launcher).
-Please file any bugs as issues onthe node at [the casper-node GitHub repo](https://github.com/CasperLabs/casper-node).
+Please file any bugs as issues on the launcher at [the casper-node-launcher GitHub repo](https://github.com/casper-network/casper-node-launcher).
+Please file any bugs as issues on the node at [the casper-node GitHub repo](https://github.com/casper-network/casper-node).

@@ -1,13 +1,13 @@
 [package]
 name = "casper-node-launcher"
 version = "1.0.5"
-authors = ["Fraser Hutchison <fraser@casperlabs.io>", "Joe Sacher <joe@casperlabs.io>"]
+authors = ["Fraser Hutchison <fraser@casperlabs.io>", "Joe Sacher <joe.sacher@casper.network>"]
 edition = "2018"
 description = "A binary which runs and upgrades the casper-node of the Casper network"
 readme = "README.md"
 documentation = "https://docs.rs/casper-node-launcher"
 homepage = "https://casper.network"
-repository = "https://github.com/CasperLabs/casper-node/tree/master/client"
+repository = "https://github.com/casper-network/casper-node-launcher"
 license-file = "./LICENSE"
 
 [dependencies]

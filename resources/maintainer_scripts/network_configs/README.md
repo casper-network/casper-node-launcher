@@ -10,56 +10,37 @@ It is recommended that network_name used is the same as the <network_name>.conf.
 
 ## Usage 
 
-These configurations will be sent to `pull_casper_node_version.sh` as an argument.
+These configurations will be sent to `node_util.py stage_protocols` as an argument.
 
 The target URL is expected to serve HTTP access to `<url>/<network_name>/<protocol_version>/[bin.tar.gz|config.tar.gz]`
+Protocol versions to install is expected to exist in `<url>/<network_name>/protocol_versions` as a protocol version per line.
 
 Example:
-`sudo -u casper pull_casper_node_version.sh casper.conf 1_0_0`
+`sudo -u casper /etc/casper/node_util.py stage_protocols casper.conf`
 
 With `casper.conf` of:
 ```
-SOURCE_URL=genesis.casperlabs.io
+SOURCE_URL=genesis.casper.network
 NETWORK_NAME=casper
-BIN_MODE=mainnet
 ```
 
 Will perform:
+
+Pull and parsing of `genesis.casper.network/casper/protocol_versions`.
+Then pulling and installing each protocol listed.
+
+If `protocol_versions` had:
+
 ```
-curl -JLO genesis.casperlabs.io/casper/1_0_0/bin.tar.gz
-curl -JLO genesis.casperlabs.io/casper/1_0_0/config.tar.gz
+2_0_0
 ```
 
+This would download:
+```
+curl -JLO genesis.casper.network/casper/2_0_0/bin.tar.gz
+curl -JLO genesis.casper.network/casper/2_0_0/config.tar.gz
+```
 `config.tar.gz` is decompressed into `/etc/casper/<protocol_version>`.
 `bin.tar.gz` is decompressed into `/var/lib/casper/<protocol_version>`.
 
-The script will error if protocol versions already exist.
-
-## Packaging
-
-With merges to `master`, `release-*` and `dev` branches in the `casper-node` repo, the artifacts are created in
-`genesis.casperlabs.io/drone/<git_hash>/<protocol version>/[bin.tar.gz|config.tar.gz]`.
-
-You may also pull down the artifacts for a given network and modify to stage a new network.  
-If you want to launch a network with the same software version of `casper`, you could pull down the `bin.tar.gz` and 
-use as is.  However, your `config.tar.gz` would need modified.
-
-```
-mkdir config
-curl -JLO genesis.casperlabs.io/casper/1_0_0/bin.tar.gz
-curl -JLO genesis.casperlabs.io/casper/1_0_0/config.tar.gz
-mv config.tar.gz config_old.tar.gz
-cd config
-tar -xzvf ../config_old.tar.gz
-```
-
-You would need to customize `chainspec.toml` with a new network name and activation_point timestamp.
-You would need to customize `config-example.toml` with new known_addresses.
-
-Once all the configuration changes are done.  Create a new config.tar.gz from within the config directory.
-
-```
-tar -czvf ../config.tar.gz .
-```
-
-Now upload `bin.tar.gz` and `config.tar.gz` to your `<url>/<network>/<protocol_version>` location.
+Then `/etc/casper/2_0_0/config.toml` is made from `config-example.toml` in the same directory.

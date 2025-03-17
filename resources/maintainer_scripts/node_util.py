@@ -339,6 +339,8 @@ class NodeUtil:
                 new_output.append(f"{name} = {new_value}")
             else:
                 new_output.append(line)
+            # Make trailing new line
+            new_output.append("")
         return "\n".join(new_output)
 
     def _config_from_example(self, protocol_version, ip=None, replace_toml=None):
@@ -821,9 +823,6 @@ class NodeUtil:
                             help="Protocol version for chainspec to verify same network",
                             required=False,
                             default="1_0_0")
-        parser.add_argument("--block",
-                            help="Block number to use (latest if omitted)",
-                            required=False)
 
         args = parser.parse_args(sys.argv[2:])
 
@@ -850,24 +849,87 @@ class NodeUtil:
         if last_added_block_info is None:
             print(f"No last_added_block_info in {args.ip} status. Node is not in sync and will not be used.")
             exit(1)
-        # If no block, getting latest so store now
         block_hash = last_added_block_info["hash"]
-        if args.block:
-            try:
-                block = self._rpc_get_block(server=args.ip, block_height=args.block)
-                block_hash = block["block"]["hash"]
-            except Exception as e:
-                if "timed out" in str(e):
-                    print(f"RPC call timed out, either {args.ip} has RPC port blocked or is not in sync.")
-                else:
-                    print(f"Error calling RPC for {args.ip}.")
-                exit(1)
         print(f"{block_hash}")
 
     def get_ip(self):
         """ Get external IP of node. Can be used to test code used for automatically filling IP
          or to check if you need to update the IP in your config.toml file. """
         print(self._get_external_ip())
+
+    def node_log(self):
+        """ Get nodes current logs. Same as 'cat /var/log/casper-node.log` with grep added if using arguments
+        and tail if following. """
+        parser = argparse.ArgumentParser(description=self.node_log.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} node_log [--err] [--warn] [--follow]")
+        parser.add_argument("--err",
+                            help="Return log lines with level ERR",
+                            action='store_true',
+                            required=False)
+        parser.add_argument("--warn",
+                            help="Return log lines with level WARN",
+                            action='store_true',
+                            required=False)
+        parser.add_argument("--follow",
+                            help="Follow log file as lines are added",
+                            action='store_true',
+                            required=False)
+        args = parser.parse_args(sys.argv[2:])
+
+        grep_args = ""
+        grep_args += " -e '\"level\":\"ERR\"'" if args.err else ""
+        grep_args += " -e '\"level\":\"WARN\"'" if args.warn else ""
+
+        grep = f" | grep {grep_args}" if len(grep_args) > 0 else ""
+
+        main_cmd = "tail -f" if args.follow else "cat"
+
+        os.system(f"{main_cmd} /var/log/casper/casper-node.log {grep}")
+
+    @staticmethod
+    def node_error_log():
+        """ Get nodes current teardown error log. Same as 'cat /var/log/casper-node.stderr.log` """
+        os.system("cat /var/log/casper/casper-node.stderr.log")
+
+    @staticmethod
+    def sidecar_status():
+        """ Get systemd status of casper-sidecar. Same as `systemctl status casper-sidecar` """
+        # using op.popen to stop hanging return to terminate
+        result = os.popen("systemctl status casper-sidecar")
+        print(result.read())
+
+    def sidecar_log(self):
+        """ Get log from casper-sidecar. Same as `journalctl -u casper-sidecar --no-pager` """
+        parser = argparse.ArgumentParser(description=self.sidecar_log.__doc__,
+                                         usage=f"{self.SCRIPT_NAME} sidecar_log [--follow]")
+        parser.add_argument("--follow",
+                            help="Follow log file as lines are added",
+                            action='store_true',
+                            required=False)
+
+        args = parser.parse_args(sys.argv[2:])
+        follow = "--follow" if args.follow else ""
+        os.system(f"journalctl -u casper-sidecar --no-pager {follow}")
+
+    def sidecar_stop(self):
+        """ Stop casper-sidecar. Use 'sudo'.
+        Same as `sudo systemctl stop casper-sidecar` """
+        self._verify_root_user()
+        os.system("sudo systemctl stop casper-sidecar")
+
+    def sidecar_start(self):
+        """ Start casper-sidecar. Use 'sudo'.
+        Same as `sudo systemctl start casper-sidecar` """
+        self._verify_root_user()
+        os.system("sudo systemctl start casper-sidecar")
+
+    def sidecar_restart(self):
+        """ Restart casper-sidecar. Use 'sudo'. """
+        self._verify_root_user()
+        self.sidecar_stop()
+        time.sleep(0.5)
+        self.sidecar_start()
+
 
 if __name__ == '__main__':
     NodeUtil()

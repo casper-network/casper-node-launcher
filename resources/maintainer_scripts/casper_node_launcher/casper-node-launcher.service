@@ -1,6 +1,6 @@
 [Unit]
 Description=Casper Node Launcher
-Documentation=https://docs.casperlabs.io
+Documentation=https://docs.casper.network
 After=network-online.target
 # Stop restarting after 3 failures in 15 seconds
 StartLimitBurst=3

@@ -1,6 +1,6 @@
 [package]
 name = "casper-node-launcher"
-version = "1.0.6"
+version = "1.0.7"
 authors = ["Fraser Hutchison <fraser@casperlabs.io>", "Joe Sacher <joe.sacher@casper.network>"]
 edition = "2018"
 description = "A binary which runs and upgrades the casper-node of the Casper network"
@@ -29,7 +29,7 @@ tempfile = "3.6.0"
 
 [package.metadata.deb]
 name = "casper-node-launcher"
-depends = "curl"
+depends = "curl, casper-node-util"
 revision = "0"
 assets = [
     ["./target/release/casper-node-launcher", "/usr/bin/casper-node-launcher", "755"],
@@ -46,9 +46,6 @@ Package for Casper Node Launcher
 
 For information on using package, see https://github.com/casper-network/casper-node-launcher
 """
-
-[package.metadata.deb.variants.focal]
-
 [package.metadata.deb.variants.jammy]
 
 [package.metadata.deb.variants.noble]

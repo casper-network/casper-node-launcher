@@ -165,9 +165,9 @@ where
     // This function should ideally be replaced with `itertools::join()`.
     // However, currently, it is only used to produce a proper debug message,
     // which is not sufficient justification to add a dependency to `itertools`.
-    let result = iterable.into_iter().fold(String::new(), |result, item| {
-        format!("{result}{item}, ")
-    });
+    let result = iterable
+        .into_iter()
+        .fold(String::new(), |result, item| format!("{result}{item}, "));
     if result.is_empty() {
         result
     } else {

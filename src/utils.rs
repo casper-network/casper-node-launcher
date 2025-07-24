@@ -116,15 +116,15 @@ pub(crate) fn run_node(mut command: Command) -> Result<NodeExitCode> {
 
     let exit_status = map_and_log_error(
         child.wait(),
-        format!("failed to wait for completion of {:?}", command),
+        format!("failed to wait for completion of {command:?}"),
     )?;
     match exit_status.code() {
         Some(code) if code == NodeExitCode::Success as i32 => {
-            debug!("successfully finished running {:?}", command);
+            debug!("successfully finished running {command:?}");
             Ok(NodeExitCode::Success)
         }
         Some(code) if code == NodeExitCode::ShouldDowngrade as i32 => {
-            debug!("finished running {:?} - should downgrade now", command);
+            debug!("finished running {command:?} - should downgrade now");
             Ok(NodeExitCode::ShouldDowngrade)
         }
         Some(code) if code == NodeExitCode::ShouldExitLauncher as i32 => {
@@ -135,8 +135,8 @@ pub(crate) fn run_node(mut command: Command) -> Result<NodeExitCode> {
             Ok(NodeExitCode::ShouldExitLauncher)
         }
         _ => {
-            warn!(%exit_status, "failed running {:?}", command);
-            bail!("{:?} exited with error", command);
+            warn!(%exit_status, "failed running {command:?}");
+            bail!("{command:?} exited with error");
         }
     }
 }
@@ -149,7 +149,7 @@ pub(crate) fn map_and_log_error<T, E: std::error::Error + Send + Sync + 'static>
     match result {
         Ok(t) => Ok(t),
         Err(error) => {
-            warn!(%error, "{}", error_msg);
+            warn!(%error, "{error_msg}");
             Err(Error::new(error).context(error_msg))
         }
     }
@@ -166,7 +166,7 @@ where
     // However, currently, it is only used to produce a proper debug message,
     // which is not sufficient justification to add a dependency to `itertools`.
     let result = iterable.into_iter().fold(String::new(), |result, item| {
-        format!("{}{}, ", result, item)
+        format!("{result}{item}, ")
     });
     if result.is_empty() {
         result

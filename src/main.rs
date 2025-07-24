@@ -42,13 +42,13 @@ fn stop_child() {
 fn panic_hook(info: &PanicHookInfo) {
     let backtrace = Backtrace::new();
 
-    eprintln!("{:?}", backtrace);
+    eprintln!("{backtrace:?}");
 
     // Print panic info.
     if let Some(&string) = info.payload().downcast_ref::<&str>() {
-        eprintln!("node panicked: {}", string);
+        eprintln!("node panicked: {string}");
     } else {
-        eprintln!("{}", info);
+        eprintln!("{info}");
     }
 
     stop_child()
@@ -80,7 +80,7 @@ fn main() -> Result<()> {
                 .long("force-version")
                 .value_name("version")
                 .help("Forces the launcher to run the specified version of the node, for example \"1.2.3\"")
-                .validator(|arg: &str| Version::from_str(arg).map_err(|_| format!("unable to parse '{}' as version", arg)))
+                .validator(|arg: &str| Version::from_str(arg).map_err(|_| format!("unable to parse '{arg}' as version")))
                 .required(false)
                 .takes_value(true),
         )

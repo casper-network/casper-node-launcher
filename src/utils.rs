@@ -111,7 +111,7 @@ pub(crate) fn versions_from_path<P: AsRef<Path>>(dir: P) -> Result<BTreeSet<Vers
 
 /// Runs the given command as a child process.
 pub(crate) fn run_node(mut command: Command) -> Result<NodeExitCode> {
-    let mut child = map_and_log_error(command.spawn(), format!("failed to execute {:?}", command))?;
+    let mut child = map_and_log_error(command.spawn(), format!("failed to execute {command:?}"))?;
     crate::CHILD_PID.store(child.id(), Ordering::SeqCst);
 
     let exit_status = map_and_log_error(

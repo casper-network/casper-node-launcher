@@ -200,24 +200,21 @@ impl Launcher {
     /// Tries to load the stored state from disk.
     fn try_load_state(&self) -> Result<Option<State>> {
         let state_path = self.state_path();
-        state_path
-            .exists()
-            .then(|| {
-                debug!(path=%state_path.display(), "trying to read stored state");
-                let contents = utils::map_and_log_error(
-                    fs::read_to_string(&state_path),
-                    format!("failed to read {}", state_path.display()),
-                )?;
+        if state_path.exists() {
+            debug!(path=%state_path.display(), "trying to read stored state");
+            let contents = utils::map_and_log_error(
+                fs::read_to_string(&state_path),
+                format!("failed to read {}", state_path.display()),
+            )?;
 
-                Ok(Some(utils::map_and_log_error(
-                    toml::from_str(&contents),
-                    format!("failed to parse {}", state_path.display()),
-                )?))
-            })
-            .unwrap_or_else(|| {
-                debug!(path=%state_path.display(), "stored state doesn't exist");
-                Ok(None)
-            })
+            Ok(Some(utils::map_and_log_error(
+                toml::from_str(&contents),
+                format!("failed to parse {}", state_path.display()),
+            )?))
+        } else {
+            debug!(path=%state_path.display(), "stored state doesn't exist");
+            Ok(None)
+        }
     }
 
     /// Writes `self` to the hard-coded location as a TOML-encoded file.
@@ -418,7 +415,7 @@ impl Launcher {
             info!("running shutdown script at {}.", SHUTDOWN_SCRIPT_PATH);
             let status = utils::map_and_log_error(
                 Command::new(SHUTDOWN_SCRIPT_PATH).status(),
-                format!("couldn't execute script at {}", SHUTDOWN_SCRIPT_PATH),
+                format!("couldn't execute script at {SHUTDOWN_SCRIPT_PATH}"),
             )?;
             status.code().unwrap_or_else(|| {
                 error!("shutdown script was terminated by a signal.");

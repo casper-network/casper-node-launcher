@@ -16,8 +16,8 @@ jobs:
         include:
           - os: ubuntu-22.04
             code_name: jammy
-          - os: ubuntu-24.04
-            code_name: noble
+          # - os: ubuntu-24.04
+          #   code_name: noble
 
     runs-on: ${{ matrix.os }}
 

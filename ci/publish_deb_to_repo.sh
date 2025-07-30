@@ -35,7 +35,7 @@ fi
 
 # If aptly mirror DOESNT exist locally already
 if [ ! "$(aptly mirror list | grep $PLUGIN_OS_CODENAME)" ] && [ ! "$EXISTS_RET" = "false" ] ; then
-    aptly mirror create -ignore-signatures "local-repo-$PLUGIN_OS_CODENAME" https://"${PLUGIN_REPO_NAME}"/"${PLUGIN_PREFIX}"/ "${PLUGIN_OS_CODENAME}" main
+    aptly mirror create -ignore-signatures -filter="!( Name (% casper-node-launcher))" "local-repo-$PLUGIN_OS_CODENAME" https://"${PLUGIN_REPO_NAME}"/"${PLUGIN_PREFIX}"/ "${PLUGIN_OS_CODENAME}" main
 fi
 
 # When it's not the first time uploading.

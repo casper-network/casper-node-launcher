@@ -10,6 +10,9 @@ All notable changes to this project will be documented in this file.  The format
 [comment]: <> (Security:   in case of vulnerabilities)
 
 ## [Unreleased]
+### Changed
+* Upgraded `clap` from 3 to 4, to drop the unmaintained `atty` dependency. This clears RUSTSEC-2024-0375 and RUSTSEC-2021-0145.
+
 ### Added
 * Launcher now handles node exit code `103` by running a script at `/etc/casper/casper_shutdown_script` and exiting with its exit code if present, otherwise returning 0.
 

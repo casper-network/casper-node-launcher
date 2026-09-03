@@ -11,17 +11,17 @@ repository = "https://github.com/casper-network/casper-node-launcher"
 license-file = "./LICENSE"
 
 [dependencies]
-anyhow = "1.0.38"
+anyhow = "1.0.104"
 backtrace = "0.3.56"
 clap = { version = "4.6", features = ["cargo"] }
 once_cell = "1.5.2"
-nix = "0.23.0"
+nix = { version = "0.31.3", features = ["signal"] }
 semver = { version = "1.0.4", features = ["serde"] }
 serde = { version = "1.0.120", features = ["derive"] }
-signal-hook = "0.3.4"
-toml = "0.5.8"
+signal-hook = "0.4.4"
+toml = "1.0"
 tracing = "0.1.22"
-tracing-subscriber = { version = "0.3.17", features = ["json", "env-filter"] }
+tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
 
 [dev-dependencies]
 once_cell = "1.5.2"

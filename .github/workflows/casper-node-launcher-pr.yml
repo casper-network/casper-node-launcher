@@ -17,17 +17,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
 
+      # No toolchain is named here on purpose: rustup reads rust-toolchain.toml
       - name: rustup setup
-        run: rustup component add rustfmt clippy
+        run: rustup toolchain install
 
       - name: cargo setup
-        run: cargo install cargo-audit
+        # --locked uses cargo-audit's own lockfile; to not pick up broken tinyvec 1.13.0.
+        run: cargo install cargo-audit --locked
 
       - name: fmt
         run: cargo fmt -- --check

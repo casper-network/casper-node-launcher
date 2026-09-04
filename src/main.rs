@@ -15,7 +15,7 @@ use std::{
 
 use anyhow::Result;
 use backtrace::Backtrace;
-use clap::{crate_description, crate_version, Arg, Command};
+use clap::{crate_description, crate_version, Arg, ArgAction, ArgMatches, Command};
 use nix::{
     sys::signal::{self, Signal},
     unistd::Pid,
@@ -62,6 +62,31 @@ fn signal_handler() {
     }
 }
 
+/// Builds the command line interface.
+fn cli() -> Command {
+    Command::new(APP_NAME)
+        .version(crate_version!())
+        .arg(
+            Arg::new("force-version")
+                .short('f')
+                .long("force-version")
+                .value_name("version")
+                .help("Forces the launcher to run the specified version of the node, for example \"1.2.3\"")
+                .value_parser(|arg: &str| {
+                    Version::from_str(arg)
+                        .map_err(|_| format!("unable to parse '{arg}' as version"))
+                })
+                .required(false)
+                .action(ArgAction::Set),
+        )
+        .about(crate_description!())
+}
+
+/// Extracts the version the launcher was asked to run, if any.
+fn forced_version(matches: &ArgMatches) -> Option<Version> {
+    matches.get_one::<Version>("force-version").cloned()
+}
+
 fn main() -> Result<()> {
     logging::init()?;
 
@@ -72,26 +97,43 @@ fn main() -> Result<()> {
     // this thread as it will block if the child process dies without a signal having been received
     // in the main launcher process.
     let _ = thread::spawn(signal_handler);
-    let command = Command::new(APP_NAME)
-        .version(crate_version!())
-        .arg(
-            Arg::new("force-version")
-                .short('f')
-                .long("force-version")
-                .value_name("version")
-                .help("Forces the launcher to run the specified version of the node, for example \"1.2.3\"")
-                .validator(|arg: &str| Version::from_str(arg).map_err(|_| format!("unable to parse '{arg}' as version")))
-                .required(false)
-                .takes_value(true),
-        )
-        .about(crate_description!());
-    let matches = command.get_matches();
 
-    // Safe to unwrap() as we have the string validated by `clap` already.
-    let forced_version = matches
-        .value_of("force-version")
-        .map(|ver| Version::from_str(ver).unwrap());
+    let matches = cli().get_matches();
+    let forced_version = forced_version(&matches);
 
     let mut launcher = Launcher::new(forced_version)?;
     launcher.run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn matches_from(args: &[&str]) -> Result<ArgMatches, clap::Error> {
+        cli().try_get_matches_from(args)
+    }
+
+    #[test]
+    fn should_parse_forced_version() {
+        let matches = matches_from(&["casper-node-launcher", "--force-version", "1.2.3"]).unwrap();
+        assert_eq!(forced_version(&matches), Some(Version::new(1, 2, 3)));
+    }
+
+    #[test]
+    fn should_have_no_forced_version_by_default() {
+        let matches = matches_from(&["casper-node-launcher"]).unwrap();
+        assert_eq!(forced_version(&matches), None);
+    }
+
+    #[test]
+    fn should_reject_invalid_forced_version() {
+        let error = matches_from(&["casper-node-launcher", "--force-version", "not-a-version"])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("unable to parse 'not-a-version' as version"),
+            "unexpected error: {}",
+            error
+        );
+    }
 }

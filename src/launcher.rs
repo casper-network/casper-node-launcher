@@ -152,10 +152,7 @@ impl Launcher {
                     Ok(launcher)
                 } else {
                     info!(%forced_version, "the requested version is not installed");
-                    bail!(
-                        "the requested version ({}) is not installed",
-                        forced_version
-                    )
+                    bail!("the requested version ({forced_version}) is not installed")
                 }
             }
             None => {
@@ -258,9 +255,8 @@ impl Launcher {
         if next_config_version != next_binary_version {
             warn!(%next_binary_version, %next_config_version, "next version mismatch");
             bail!(
-                "next binary version {} != next config version {}",
-                next_binary_version,
-                next_config_version,
+                "next binary version {next_binary_version} != next config version \
+                 {next_config_version}"
             );
         }
         Ok(next_binary_version)
@@ -277,9 +273,8 @@ impl Launcher {
         if previous_config_version != previous_binary_version {
             warn!(%previous_binary_version, %previous_config_version, "previous version mismatch");
             bail!(
-                "previous binary version {} != previous config version {}",
-                previous_binary_version,
-                previous_config_version,
+                "previous binary version {previous_binary_version} != previous config version \
+                 {previous_config_version}"
             );
         }
         Ok(previous_binary_version)
